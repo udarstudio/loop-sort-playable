@@ -2,7 +2,7 @@
 
 PixiJS and TypeScript prototype for the Voodoo playable ad task. Translucent arrows move counterclockwise around the conveyor above six carriers.
 
-The truck and cargo sprites in `src/assets/truck-atlas.png` are rendered from the supplied `1.8kV2.fbx` truck and `Cube Beveled.fbx` models.
+The truck and cargo sprites in `src/assets/truck-atlas.png` are rendered from the supplied `1.8kV2.fbx` truck and `Cube.fbx` models.
 
 ## Local development
 

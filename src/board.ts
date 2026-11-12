@@ -30,16 +30,16 @@ const buses: readonly Bus[] = [
     ['pink', 'white', 'orange', 'pink'],
   ],
   [
-    ['white', 'white', 'white', 'white'],
-    ['pink', 'pink', 'white', 'orange'],
-    ['white', 'pink', null, null],
     emptyWagon,
+    [null, null, 'white', 'white'],
+    ['white', 'white', 'pink', 'pink'],
+    ['white', 'orange', 'white', 'pink'],
   ],
   [
+    emptyWagon,
     ['orange', 'pink', 'pink', 'orange'],
     ['white', 'white', 'orange', 'pink'],
     ['orange', 'white', 'pink', 'pink'],
-    emptyWagon,
   ],
 ];
 
