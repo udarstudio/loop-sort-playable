@@ -1,0 +1,20 @@
+:root {
+  color-scheme: dark;
+  font-family: system-ui, sans-serif;
+  background: #101827;
+}
+
+body {
+  margin: 0;
+  overflow: hidden;
+}
+
+main {
+  display: grid;
+  min-height: 100dvh;
+  place-items: center;
+}
+
+canvas {
+  display: block;
+}
