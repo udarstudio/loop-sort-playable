@@ -31,7 +31,7 @@ const mount = document.querySelector<HTMLElement>('#playable');
 
 if (mount) {
   void startPlayable(mount).catch((error: unknown) => {
-    console.error('Could not start Loop Sort Man.', error);
+    console.error('Could not start Loop Sort.', error);
     mount.textContent = 'The playable could not start.';
   });
 }
