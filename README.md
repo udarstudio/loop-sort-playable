@@ -1,6 +1,6 @@
 # Loop Sort Playable
 
-PixiJS and TypeScript starter for the Voodoo playable ad task. The starter renders a loop on a canvas that resizes with the viewport.
+PixiJS and TypeScript prototype for the Voodoo playable ad task. Translucent arrows move counterclockwise around the conveyor above six carriers.
 
 ## Local development
 

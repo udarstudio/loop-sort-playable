@@ -1,30 +1,29 @@
-import { Application, Graphics } from 'pixi.js';
+import 'pixi.js/graphics';
+import { Application } from 'pixi.js';
+import { boardHeight, boardWidth, createBoard } from './board';
+import { createConveyorFlow } from './conveyor-arrows';
 import './style.css';
 
 async function startPlayable(mount: HTMLElement): Promise<void> {
   const app = new Application();
 
   await app.init({
-    resizeTo: window,
-    background: 0x101827,
-    antialias: true,
-    autoDensity: true,
-    resolution: Math.min(window.devicePixelRatio, 2),
-    preference: 'webgl',
+    width: boardWidth,
+    height: boardHeight,
+    background: 0x1c173c,
+    resolution: Math.min(window.devicePixelRatio, 1.5),
+    autoStart: false,
+    preference: ['webgl', 'canvas'],
+    skipExtensionImports: true,
   });
 
-  const loop = new Graphics()
-    .circle(0, 0, 56)
-    .stroke({ width: 12, color: 0x56dfbc });
-
-  function centerLoop(): void {
-    loop.position.set(app.screen.width / 2, app.screen.height / 2);
-  }
-
-  app.stage.addChild(loop);
-  app.renderer.on('resize', centerLoop);
-  centerLoop();
+  const flow = createConveyorFlow();
+  app.stage.addChild(createBoard(), flow.view);
+  app.ticker.maxFPS = 30;
+  app.ticker.add(({ deltaMS }) => flow.advance(deltaMS));
   mount.appendChild(app.canvas);
+  app.render();
+  app.start();
 }
 
 const mount = document.querySelector<HTMLElement>('#playable');
