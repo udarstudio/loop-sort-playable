@@ -2,23 +2,27 @@ import 'pixi.js/graphics';
 import { Application } from 'pixi.js';
 import { boardHeight, boardWidth, createBoard } from './board';
 import { createConveyorFlow } from './conveyor-arrows';
+import { loadTruckArt } from './truck-art';
 import './style.css';
 
 async function startPlayable(mount: HTMLElement): Promise<void> {
   const app = new Application();
 
-  await app.init({
-    width: boardWidth,
-    height: boardHeight,
-    background: 0x1c173c,
-    resolution: Math.min(window.devicePixelRatio, 1.5),
-    autoStart: false,
-    preference: ['webgl', 'canvas'],
-    skipExtensionImports: true,
-  });
+  const [truckArt] = await Promise.all([
+    loadTruckArt(),
+    app.init({
+      width: boardWidth,
+      height: boardHeight,
+      background: 0x1c173c,
+      resolution: Math.min(window.devicePixelRatio, 1.5),
+      autoStart: false,
+      preference: ['webgl', 'canvas'],
+      skipExtensionImports: true,
+    }),
+  ]);
 
   const flow = createConveyorFlow();
-  app.stage.addChild(createBoard(), flow.view);
+  app.stage.addChild(createBoard(truckArt), flow.view);
   app.ticker.maxFPS = 30;
   app.ticker.add(({ deltaMS }) => flow.advance(deltaMS));
   mount.appendChild(app.canvas);
