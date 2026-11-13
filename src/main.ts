@@ -116,7 +116,9 @@ async function startPlayable(mount: HTMLElement): Promise<void> {
   app.ticker.maxFPS = 30;
   app.ticker.add(({ deltaMS }) => {
     scene.advance(deltaMS);
-    flow.advance(cargo.advance(deltaMS, scene.receivers));
+    const distance = cargo.advance(deltaMS, scene.receivers);
+    flow.advance(distance);
+    scene.advanceFactory(distance);
   });
 
   board.append(app.canvas, capacity);

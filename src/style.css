@@ -67,12 +67,12 @@ canvas {
 
 .conveyor-capacity {
   position: absolute;
-  top: 25%;
+  top: 33.08%;
   left: 50%;
   transform: translate(-50%, -50%);
   display: grid;
   place-items: center;
-  width: 27%;
+  width: 25%;
   aspect-ratio: 274 / 98;
   background: url('./assets/capacity-bg.png') center / contain no-repeat;
   color: #f6f2ff;

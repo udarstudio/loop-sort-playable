@@ -2,6 +2,7 @@ import { Container, Graphics, Sprite } from 'pixi.js';
 import type { createConveyorCargo } from './conveyor-cargo';
 import { conveyorEntryDistance } from './conveyor-path';
 import { pieceFlightDuration, piecesPerBlock, preparePieceToStack, stackPiece, type Piece } from './conveyor-pieces';
+import { createFactory } from './factory';
 import { blockColors, type BlockColor, type TruckArt } from './truck-art';
 import { createTruckRoad } from './truck-roads';
 
@@ -169,6 +170,7 @@ function addTruck(
 
 export function createBoard(art: TruckArt, conveyor: ConveyorInput, events: TruckEvents) {
   const board = new Container();
+  const factory = createFactory(boardWidth / 2, 161);
   const loads = createTruckLoads();
   const truckSpacing = 48;
   const firstTruckX = 40;
@@ -178,6 +180,7 @@ export function createBoard(art: TruckArt, conveyor: ConveyorInput, events: Truc
   board.addChild(
     createTruckRoad(roadMargin, boardWidth - roadMargin, truckTop - 38, boardHeight, laneDividers),
     createConveyor(),
+    factory.view,
   );
 
   const trucks = loads.map((blocks, index) =>
@@ -186,6 +189,7 @@ export function createBoard(art: TruckArt, conveyor: ConveyorInput, events: Truc
   return {
     view: board,
     receivers: trucks,
+    advanceFactory: factory.advance,
     advance(deltaMS: number) {
       let pieceLanded = false;
       for (const truck of trucks) {
