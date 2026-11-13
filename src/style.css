@@ -32,6 +32,32 @@ main {
   container-type: inline-size;
 }
 
+.board::after {
+  --lane-spacing: calc(100cqw * 48 / 360);
+  --lane-width: calc(100cqw * 2 / 360);
+  --lane-dashes: repeating-linear-gradient(
+    to bottom,
+    #554570 0 calc(100cqw * 12 / 360),
+    transparent calc(100cqw * 12 / 360) calc(100cqw * 22 / 360)
+  );
+  content: '';
+  position: absolute;
+  top: 100%;
+  inset-inline: 7.777778%;
+  height: 50vh;
+  /* Continue the canvas markings on viewports taller than the board. */
+  background:
+    var(--lane-dashes) calc(50% - 2 * var(--lane-spacing)) 0 / var(--lane-width) 100% no-repeat,
+    var(--lane-dashes) calc(50% - var(--lane-spacing)) 0 / var(--lane-width) 100% no-repeat,
+    var(--lane-dashes) center / var(--lane-width) 100% no-repeat,
+    var(--lane-dashes) calc(50% + var(--lane-spacing)) 0 / var(--lane-width) 100% no-repeat,
+    var(--lane-dashes) calc(50% + 2 * var(--lane-spacing)) 0 / var(--lane-width) 100% no-repeat,
+    #32274d;
+  border-inline: 0.833333cqw solid #221a3c;
+  box-shadow: inset 0.833333cqw 0 #51416f, inset -0.833333cqw 0 #51416f;
+  pointer-events: none;
+}
+
 canvas {
   display: block;
   width: 100%;

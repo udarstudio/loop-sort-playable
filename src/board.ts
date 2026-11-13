@@ -3,12 +3,14 @@ import type { createConveyorCargo } from './conveyor-cargo';
 import { conveyorEntryDistance } from './conveyor-path';
 import { pieceFlightDuration, piecesPerBlock, preparePieceToStack, stackPiece, type Piece } from './conveyor-pieces';
 import { blockColors, type BlockColor, type TruckArt } from './truck-art';
+import { createTruckRoad } from './truck-roads';
 
 export const boardWidth = 360;
 export const boardHeight = 656;
 
 const truckCapacity = 16;
 const blocksPerColor = 32;
+const truckTop = 302;
 
 function createTruckLoads(): BlockColor[][] {
   const blocks = blockColors.flatMap((color) => Array<BlockColor>(blocksPerColor).fill(color));
@@ -51,15 +53,14 @@ function addTruck(
   board: Container, x: number, blocks: readonly BlockColor[], art: TruckArt,
   conveyor: ConveyorInput, events: TruckEvents,
 ) {
-  const top = 304;
   const body = new Sprite(art.body);
-  body.position.set(x - 2, top - 2);
+  body.position.set(x - 2, truckTop);
   board.addChild(body);
 
   const cargoX = x + 6;
   const cargoHeight = 271;
   const blockHeight = cargoHeight / truckCapacity;
-  const cargoBottom = top + cargoHeight;
+  const cargoBottom = truckTop + 2 + cargoHeight;
   const firstBlockY = cargoBottom - blocks.length * blockHeight;
   const distance = conveyorEntryDistance(body.x + body.width / 2);
   const loading: PartialBlock[] = [];
@@ -168,10 +169,19 @@ function addTruck(
 
 export function createBoard(art: TruckArt, conveyor: ConveyorInput, events: TruckEvents) {
   const board = new Container();
-  board.addChild(createConveyor());
+  const loads = createTruckLoads();
+  const truckSpacing = 48;
+  const firstTruckX = 40;
+  const firstTruckCenter = firstTruckX - 2 + art.body.width / 2;
+  const laneDividers = loads.slice(1).map((_, index) => firstTruckCenter + (index + 0.5) * truckSpacing);
+  const roadMargin = 28;
+  board.addChild(
+    createTruckRoad(roadMargin, boardWidth - roadMargin, truckTop - 38, boardHeight, laneDividers),
+    createConveyor(),
+  );
 
-  const trucks = createTruckLoads().map((blocks, index) =>
-    addTruck(board, 40 + index * 48, blocks, art, conveyor, events));
+  const trucks = loads.map((blocks, index) =>
+    addTruck(board, firstTruckX + index * truckSpacing, blocks, art, conveyor, events));
 
   return {
     view: board,
