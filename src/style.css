@@ -1,6 +1,14 @@
+@font-face {
+  font-family: Fredoka;
+  src: url('./assets/Fredoka-Bold.ttf') format('truetype');
+  font-weight: 700;
+  font-display: swap;
+}
+
 :root {
   color-scheme: dark;
-  font-family: system-ui, sans-serif;
+  font-family: Fredoka, system-ui, sans-serif;
+  font-weight: 700;
   background: #1c173c;
 }
 
@@ -43,7 +51,6 @@ canvas {
   background: url('./assets/capacity-bg.png') center / contain no-repeat;
   color: #f6f2ff;
   font-size: 5cqw;
-  font-weight: 800;
   font-variant-numeric: tabular-nums;
   line-height: 1;
   text-shadow: 0 1px 2px #17122e;

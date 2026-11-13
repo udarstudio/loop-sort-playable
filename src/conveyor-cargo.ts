@@ -31,7 +31,7 @@ type BeltPiece = Piece & {
   canReturnToSource: boolean;
 };
 
-export function createConveyorCargo(onCountChange: (count: number) => void) {
+export function createConveyorCargo(onCountChange: (count: number) => void, onPieceDeparture: () => void) {
   const view = new Container();
   const belt: BeltPiece[] = [];
   const moving: BeltPiece[] = [];
@@ -95,10 +95,13 @@ export function createConveyorCargo(onCountChange: (count: number) => void) {
       resolvePieceCollisions(moving);
     }
 
+    let pieceDeparted = false;
     for (const piece of belt) {
       const launching = piece.elapsed < pieceFlightDuration;
+      const waiting = piece.elapsed <= 0;
       piece.elapsed = Math.min(pieceFlightDuration, piece.elapsed + deltaMS);
       if (piece.elapsed <= 0) continue;
+      if (waiting) pieceDeparted = true;
       renderPiece(piece, piece.elapsed / pieceFlightDuration, launching);
       if (piece.distance < piece.previousDistance) piece.canReturnToSource = true;
       if (launching && piece.elapsed === pieceFlightDuration) {
@@ -107,6 +110,7 @@ export function createConveyorCargo(onCountChange: (count: number) => void) {
         else departures.set(piece.sourceDistance, remaining);
       }
     }
+    if (pieceDeparted) onPieceDeparture();
 
     // Process leading pieces first when several reach the same truck in one frame.
     belt.sort((a, b) => a.distance - b.distance);
