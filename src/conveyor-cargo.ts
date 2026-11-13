@@ -1,0 +1,117 @@
+import { Container, type Sprite } from 'pixi.js';
+import { baseConveyorSpeed, loopLength } from './conveyor-path';
+import {
+  createPieces,
+  launchPiece,
+  movePiece,
+  piecesPerBlock,
+  renderPiece,
+  resolvePieceCollisions,
+  wrapDistance,
+  type Piece,
+} from './conveyor-pieces';
+
+export const conveyorCapacity = 16;
+
+const pieceCapacity = conveyorCapacity * piecesPerBlock;
+const launchDuration = 220;
+const launchSpacing = 13;
+const loadingReach = 6;
+
+export type ConveyorReceiver = {
+  distance: number;
+  receive(piece: Piece): boolean;
+};
+
+type BeltPiece = Piece & {
+  elapsed: number;
+  previousDistance: number;
+  sourceDistance: number;
+  canReturnToSource: boolean;
+};
+
+export function createConveyorCargo(onCountChange: (count: number) => void) {
+  const view = new Container();
+  const belt: BeltPiece[] = [];
+  const moving: BeltPiece[] = [];
+
+  function blockCount(): number {
+    return Math.ceil(belt.length / piecesPerBlock);
+  }
+
+  function launch(sprites: readonly Sprite[], count: number, sourceDistance: number, entry: number): void {
+    for (let index = 0; index < count; index++) {
+      const piece = launchPiece(sprites[index], entry, index, count);
+      view.addChild(piece.sprite);
+      belt.push({ ...piece, elapsed: 0, previousDistance: piece.distance, sourceDistance, canReturnToSource: false });
+    }
+  }
+
+  function addPieces(sprites: readonly Sprite[], sourceDistance: number): number {
+    const before = blockCount();
+    const added = Math.min(sprites.length, pieceCapacity - belt.length);
+    launch(sprites, added, sourceDistance, sourceDistance);
+    if (blockCount() !== before) onCountChange(blockCount());
+    return added;
+  }
+
+  function addBlocks(blocks: readonly Sprite[], sourceDistance: number): number {
+    const before = blockCount();
+    const added = Math.min(blocks.length, Math.floor((pieceCapacity - belt.length) / piecesPerBlock));
+    for (let index = 0; index < added; index++) {
+      const block = blocks[index];
+      const entry = wrapDistance(sourceDistance - index * launchSpacing);
+      const sprites = createPieces(block.texture, block.x, block.y, block.width, block.height);
+      launch(sprites, sprites.length, sourceDistance, entry);
+      block.destroy();
+    }
+    if (blockCount() !== before) onCountChange(blockCount());
+    return added;
+  }
+
+  function advance(deltaMS: number, receivers: readonly ConveyorReceiver[]): number {
+    if (deltaMS <= 0) return 0;
+    const before = blockCount();
+    const speed = baseConveyorSpeed * (before === 0 ? 1 : before <= 14 ? 3 : 2.5);
+
+    if (belt.length === 0) return speed * deltaMS / 1000;
+
+    moving.length = 0;
+    for (const piece of belt) {
+      piece.previousDistance = piece.distance;
+      if (piece.elapsed === launchDuration) moving.push(piece);
+    }
+    const steps = Math.ceil(deltaMS / 16.67);
+    const seconds = deltaMS / steps / 1000;
+    for (let step = 0; step < steps; step++) {
+      for (const piece of moving) movePiece(piece, seconds, speed);
+      resolvePieceCollisions(moving);
+    }
+
+    // Process leading pieces first when several reach the same truck in one frame.
+    belt.sort((a, b) => a.distance - b.distance);
+    for (let index = belt.length - 1; index >= 0; index--) {
+      const piece = belt[index];
+      piece.elapsed = Math.min(launchDuration, piece.elapsed + deltaMS);
+      renderPiece(piece, piece.elapsed / launchDuration);
+      if (piece.distance < piece.previousDistance) piece.canReturnToSource = true;
+      if (piece.elapsed < launchDuration) continue;
+
+      const travel = wrapDistance(piece.distance - piece.previousDistance);
+      for (const receiver of receivers) {
+        if (receiver.distance === piece.sourceDistance && !piece.canReturnToSource) continue;
+        const distanceAhead = wrapDistance(receiver.distance - piece.previousDistance + loadingReach);
+        if (distanceAhead > travel + 2 * loadingReach) continue;
+
+        if (!receiver.receive(piece)) continue;
+        belt.splice(index, 1);
+        break;
+      }
+    }
+
+    if (blockCount() !== before) onCountChange(blockCount());
+    return speed * deltaMS / 1000;
+  }
+
+  return { view, addBlocks, addPieces, advance };
+}

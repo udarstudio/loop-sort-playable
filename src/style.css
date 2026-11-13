@@ -10,8 +10,18 @@ body {
 }
 
 main {
+  display: grid;
+  place-items: center;
   height: 100vh;
   height: 100dvh;
+}
+
+.board {
+  position: relative;
+  width: min(100vw, calc(100vh * var(--board-aspect)));
+  width: min(100vw, calc(100dvh * var(--board-aspect)));
+  aspect-ratio: var(--board-aspect);
+  container-type: inline-size;
 }
 
 canvas {
@@ -19,4 +29,22 @@ canvas {
   width: 100%;
   height: 100%;
   object-fit: contain;
+}
+
+.conveyor-capacity {
+  position: absolute;
+  top: 25%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  display: grid;
+  place-items: center;
+  width: 27%;
+  aspect-ratio: 274 / 98;
+  background: url('./assets/capacity-bg.png') center / contain no-repeat;
+  color: #f6f2ff;
+  font-size: 5cqw;
+  font-weight: 800;
+  font-variant-numeric: tabular-nums;
+  line-height: 1;
+  text-shadow: 0 1px 2px #17122e;
 }
