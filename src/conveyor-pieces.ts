@@ -1,14 +1,17 @@
-import { Sprite, type Texture } from 'pixi.js';
+import { Rectangle, Sprite, Texture } from 'pixi.js';
 import { loopLength, positionOnConveyor } from './conveyor-path';
 
 const columns = 4;
 const rows = 4;
 export const piecesPerBlock = columns * rows;
+export const pieceFlightDuration = 300;
 const beltLanes = 3;
 const pieceSize = 8.5;
 const collisionDiameter = pieceSize;
 const beltHalfWidth = 15;
 const laneLimit = beltHalfWidth - Math.SQRT2 * pieceSize / 2;
+const blockTiles = new WeakMap<Texture, Texture[]>();
+const tileBlocks = new WeakMap<Texture, Texture>();
 
 export type Piece = {
   sprite: Sprite;
@@ -18,36 +21,74 @@ export type Piece = {
   laneVelocity: number;
   speedFactor: number;
   driftPhase: number;
-  fromX: number;
-  fromY: number;
-  fromRotation: number;
+  from: ReturnType<typeof readPose>;
 };
 
 export function wrapDistance(distance: number): number {
   return ((distance % loopLength) + loopLength) % loopLength;
 }
 
-export function createPieces(texture: Texture, x: number, y: number, width: number, height: number): Sprite[] {
-  return Array.from({ length: piecesPerBlock }, (_, index) => {
-    const column = index % columns;
-    const row = Math.floor(index / columns);
-    const fromX = x + (column + 0.5) * width / columns;
-    const fromY = y + (row + 0.5) * height / rows;
-    const sprite = new Sprite(texture);
+function getBlockTiles(texture: Texture): Texture[] {
+  let tiles = blockTiles.get(texture);
+  if (!tiles) {
+    const { frame, source } = texture;
+    const tileWidth = frame.width / columns;
+    const tileHeight = frame.height / rows;
+    tiles = Array.from({ length: piecesPerBlock }, (_, index) => new Texture({
+      source,
+      frame: new Rectangle(
+        frame.x + (index % columns) * tileWidth,
+        frame.y + cellRow(index) * tileHeight,
+        tileWidth,
+        tileHeight,
+      ),
+    }));
+    for (const tile of tiles) tileBlocks.set(tile, texture);
+    blockTiles.set(texture, tiles);
+  }
+  return tiles;
+}
+
+function cellRow(index: number): number {
+  return rows - 1 - Math.floor(index / columns);
+}
+
+function blockCell(block: Sprite, index: number) {
+  const width = block.width / columns;
+  const height = block.height / rows;
+  return {
+    x: block.x + (index % columns + 0.5) * width,
+    y: block.y + (cellRow(index) + 0.5) * height,
+    width, height,
+  };
+}
+
+export function createPieces(block: Sprite): Sprite[] {
+  const tiles = getBlockTiles(block.texture);
+  // Unload from top right to bottom left, the reverse of stacking order.
+  return tiles.map((_, departureIndex) => {
+    const index = piecesPerBlock - 1 - departureIndex;
+    const { x, y, width, height } = blockCell(block, index);
+    const sprite = new Sprite(tiles[index]);
     sprite.anchor.set(0.5);
-    sprite.position.set(fromX, fromY);
+    sprite.setSize(width, height);
+    sprite.position.set(x, y);
     return sprite;
   });
 }
 
+function readPose(sprite: Sprite) {
+  const { x, y, width, height, rotation } = sprite;
+  return { x, y, width, height, rotation };
+}
+
 export function launchPiece(sprite: Sprite, entry: number, index: number, count: number): Piece {
-  sprite.setSize(pieceSize, pieceSize);
   const laneIndex = (index + 1) % beltLanes;
   const piecesInLane = Math.ceil((count - index % beltLanes) / beltLanes);
   const offset = (Math.floor(index / beltLanes) - (piecesInLane - 1) / 2) * pieceSize
     + (Math.random() - 0.5) * 3;
   return {
-    sprite, fromX: sprite.x, fromY: sprite.y, fromRotation: sprite.rotation,
+    sprite, from: readPose(sprite),
     distance: wrapDistance(entry + offset),
     lane: (laneIndex - 1) * laneLimit,
     speedFactor: 0.84 + Math.random() * 0.32,
@@ -97,21 +138,38 @@ export function resolvePieceCollisions(pieces: Piece[]): void {
   }
 }
 
-export function renderPiece(piece: Piece, progress: number): void {
-  const { sprite, lane, fromX, fromY } = piece;
+export function renderPiece(piece: Piece, progress: number, launching: boolean): void {
+  const { sprite, lane } = piece;
   const heading = positionOnConveyor(sprite, piece.distance);
   const x = sprite.x - Math.sin(heading) * lane;
   const y = sprite.y + Math.cos(heading) * lane;
-  sprite.position.set(fromX + (x - fromX) * progress, fromY + (y - fromY) * progress);
   const rotation = Math.sin(piece.distance * 0.08 + piece.driftPhase) * 0.45 + piece.laneVelocity * 0.025;
-  sprite.rotation = piece.fromRotation + (rotation - piece.fromRotation) * progress;
+  if (launching) {
+    if (progress === 1) sprite.texture = tileBlocks.get(sprite.texture) ?? sprite.texture;
+    animatePieceFlight(piece, x, y, pieceSize, pieceSize, rotation, progress);
+  } else {
+    sprite.position.set(x, y);
+    sprite.rotation = rotation;
+  }
+}
+
+export function preparePieceToStack(piece: Piece, index: number, block: Sprite): void {
+  const { sprite } = piece;
+  piece.from = readPose(sprite);
+  sprite.texture = getBlockTiles(block.texture)[index];
+  sprite.setSize(piece.from.width, piece.from.height);
 }
 
 export function stackPiece(piece: Piece, index: number, block: Sprite, progress: number): void {
-  const x = block.x + (index % columns + 0.5) * block.width / columns;
-  const y = block.y + (rows - Math.floor(index / columns) - 0.5) * block.height / rows;
-  piece.sprite.position.set(piece.fromX + (x - piece.fromX) * progress, piece.fromY + (y - piece.fromY) * progress);
-  piece.sprite.setSize(pieceSize + (block.width / columns - pieceSize) * progress,
-    pieceSize + (block.height / rows - pieceSize) * progress);
-  piece.sprite.rotation = piece.fromRotation * (1 - progress);
+  const { x, y, width, height } = blockCell(block, index);
+  animatePieceFlight(piece, x, y, width, height, 0, progress);
+}
+
+function animatePieceFlight(
+  piece: Piece, x: number, y: number, width: number, height: number, rotation: number, progress: number,
+): void {
+  const { sprite, from } = piece;
+  sprite.position.set(from.x + (x - from.x) * progress, from.y + (y - from.y) * progress);
+  sprite.setSize(from.width + (width - from.width) * progress, from.height + (height - from.height) * progress);
+  sprite.rotation = from.rotation + (rotation - from.rotation) * progress;
 }

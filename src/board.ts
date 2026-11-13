@@ -1,7 +1,7 @@
 import { Container, Graphics, Sprite } from 'pixi.js';
 import type { createConveyorCargo } from './conveyor-cargo';
 import { conveyorEntryDistance } from './conveyor-path';
-import { piecesPerBlock, stackPiece, type Piece } from './conveyor-pieces';
+import { pieceFlightDuration, piecesPerBlock, preparePieceToStack, stackPiece, type Piece } from './conveyor-pieces';
 import type { BlockColor, TruckArt } from './truck-art';
 
 export const boardWidth = 360;
@@ -34,9 +34,7 @@ function createConveyor(): Graphics {
     .roundRect(60, 74, 240, 178, 17).fill(0x181436);
 }
 
-type ConveyorInput = Pick<ReturnType<typeof createConveyorCargo>, 'addBlocks' | 'addPieces'>;
-
-const pieceFlightDuration = 300;
+type ConveyorInput = Pick<ReturnType<typeof createConveyorCargo>, 'addBlocks' | 'addPieces' | 'isUnloading'>;
 
 type PartialBlock = {
   sprite: Sprite;
@@ -67,7 +65,8 @@ function addTruck(board: Container, x: number, blocks: readonly BlockColor[], ar
   body.eventMode = 'static';
   body.cursor = 'pointer';
   body.on('pointertap', ({ button }) => {
-    if (button !== 0) return;
+    if (button !== 0 || conveyor.isUnloading(distance)) return;
+    if (loading.some((block) => block.landed < block.pieces.length)) return;
 
     if (loading.length > 0) {
       const sprites = loading.flatMap((block) => block.pieces.map(({ piece }) => piece.sprite)).reverse();
@@ -97,6 +96,7 @@ function addTruck(board: Container, x: number, blocks: readonly BlockColor[], ar
   });
 
   function receive(piece: Piece): boolean {
+    if (conveyor.isUnloading(distance)) return false;
     const texture = piece.sprite.texture;
     let block = loading.at(-1);
     const topColor = (block?.sprite ?? cargo[0])?.texture;
@@ -111,9 +111,7 @@ function addTruck(board: Container, x: number, blocks: readonly BlockColor[], ar
       loading.push(block);
     }
 
-    piece.fromX = piece.sprite.x;
-    piece.fromY = piece.sprite.y;
-    piece.fromRotation = piece.sprite.rotation;
+    preparePieceToStack(piece, block.pieces.length, block.sprite);
     block.pieces.push({ piece, elapsed: 0 });
     return true;
   }

@@ -4,6 +4,7 @@ import {
   createPieces,
   launchPiece,
   movePiece,
+  pieceFlightDuration,
   piecesPerBlock,
   renderPiece,
   resolvePieceCollisions,
@@ -14,7 +15,7 @@ import {
 export const conveyorCapacity = 16;
 
 const pieceCapacity = conveyorCapacity * piecesPerBlock;
-const launchDuration = 220;
+const pieceDepartureInterval = 36;
 const launchSpacing = 13;
 const loadingReach = 6;
 
@@ -34,16 +35,22 @@ export function createConveyorCargo(onCountChange: (count: number) => void) {
   const view = new Container();
   const belt: BeltPiece[] = [];
   const moving: BeltPiece[] = [];
+  const departures = new Map<number, number>();
 
   function blockCount(): number {
     return Math.ceil(belt.length / piecesPerBlock);
   }
 
-  function launch(sprites: readonly Sprite[], count: number, sourceDistance: number, entry: number): void {
+  function launch(sprites: readonly Sprite[], count: number, sourceDistance: number, entry: number, delay = 0): void {
+    if (count === 0) return;
+    departures.set(sourceDistance, (departures.get(sourceDistance) ?? 0) + count);
     for (let index = 0; index < count; index++) {
       const piece = launchPiece(sprites[index], entry, index, count);
       view.addChild(piece.sprite);
-      belt.push({ ...piece, elapsed: 0, previousDistance: piece.distance, sourceDistance, canReturnToSource: false });
+      belt.push({
+        ...piece, elapsed: -delay - index * pieceDepartureInterval,
+        previousDistance: piece.distance, sourceDistance, canReturnToSource: false,
+      });
     }
   }
 
@@ -61,8 +68,8 @@ export function createConveyorCargo(onCountChange: (count: number) => void) {
     for (let index = 0; index < added; index++) {
       const block = blocks[index];
       const entry = wrapDistance(sourceDistance - index * launchSpacing);
-      const sprites = createPieces(block.texture, block.x, block.y, block.width, block.height);
-      launch(sprites, sprites.length, sourceDistance, entry);
+      const sprites = createPieces(block);
+      launch(sprites, sprites.length, sourceDistance, entry, index * piecesPerBlock * pieceDepartureInterval);
       block.destroy();
     }
     if (blockCount() !== before) onCountChange(blockCount());
@@ -79,7 +86,7 @@ export function createConveyorCargo(onCountChange: (count: number) => void) {
     moving.length = 0;
     for (const piece of belt) {
       piece.previousDistance = piece.distance;
-      if (piece.elapsed === launchDuration) moving.push(piece);
+      if (piece.elapsed === pieceFlightDuration) moving.push(piece);
     }
     const steps = Math.ceil(deltaMS / 16.67);
     const seconds = deltaMS / steps / 1000;
@@ -88,15 +95,24 @@ export function createConveyorCargo(onCountChange: (count: number) => void) {
       resolvePieceCollisions(moving);
     }
 
+    for (const piece of belt) {
+      const launching = piece.elapsed < pieceFlightDuration;
+      piece.elapsed = Math.min(pieceFlightDuration, piece.elapsed + deltaMS);
+      if (piece.elapsed <= 0) continue;
+      renderPiece(piece, piece.elapsed / pieceFlightDuration, launching);
+      if (piece.distance < piece.previousDistance) piece.canReturnToSource = true;
+      if (launching && piece.elapsed === pieceFlightDuration) {
+        const remaining = departures.get(piece.sourceDistance)! - 1;
+        if (remaining === 0) departures.delete(piece.sourceDistance);
+        else departures.set(piece.sourceDistance, remaining);
+      }
+    }
+
     // Process leading pieces first when several reach the same truck in one frame.
     belt.sort((a, b) => a.distance - b.distance);
     for (let index = belt.length - 1; index >= 0; index--) {
       const piece = belt[index];
-      piece.elapsed = Math.min(launchDuration, piece.elapsed + deltaMS);
-      renderPiece(piece, piece.elapsed / launchDuration);
-      if (piece.distance < piece.previousDistance) piece.canReturnToSource = true;
-      if (piece.elapsed < launchDuration) continue;
-
+      if (piece.elapsed < pieceFlightDuration) continue;
       const travel = wrapDistance(piece.distance - piece.previousDistance);
       for (const receiver of receivers) {
         if (receiver.distance === piece.sourceDistance && !piece.canReturnToSource) continue;
@@ -113,5 +129,8 @@ export function createConveyorCargo(onCountChange: (count: number) => void) {
     return speed * deltaMS / 1000;
   }
 
-  return { view, addBlocks, addPieces, advance };
+  return {
+    view, addBlocks, addPieces, advance,
+    isUnloading: (sourceDistance: number) => departures.has(sourceDistance),
+  };
 }
