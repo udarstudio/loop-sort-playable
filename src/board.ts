@@ -1,45 +1,31 @@
 import { Container, Graphics, Sprite } from 'pixi.js';
-import { blockHeight, type BlockColor, type TruckArt } from './truck-art';
+import type { BlockColor, TruckArt } from './truck-art';
 
 export const boardWidth = 360;
-export const boardHeight = 628;
+export const boardHeight = 656;
 
-type Slot = BlockColor | null;
-type Wagon = readonly [Slot, Slot, Slot, Slot];
-type Bus = readonly [Wagon, Wagon, Wagon, Wagon];
-
-const emptyWagon: Wagon = [null, null, null, null];
-const buses: readonly Bus[] = [
+const truckCapacity = 16;
+const truckLoads: readonly (readonly BlockColor[])[] = [
   [
-    ['pink', 'orange', 'white', 'pink'],
-    ['pink', 'white', 'orange', 'white'],
-    ['orange', 'pink', 'white', 'orange'],
-    ['pink', 'orange', 'white', 'pink'],
+    'pink', 'orange', 'white', 'pink', 'pink', 'white', 'orange', 'white',
+    'orange', 'pink', 'white', 'orange', 'pink', 'orange', 'white', 'pink',
   ],
-  [emptyWagon, emptyWagon, emptyWagon, emptyWagon],
+  [],
   [
-    ['pink', 'pink', 'pink', 'pink'],
-    ['pink', 'pink', 'white', 'orange'],
-    ['pink', 'white', 'white', 'orange'],
-    ['pink', 'pink', 'white', 'orange'],
+    'pink', 'pink', 'pink', 'pink', 'pink', 'pink', 'white', 'orange',
+    'pink', 'white', 'white', 'orange', 'pink', 'pink', 'white', 'orange',
   ],
   [
-    ['pink', 'pink', 'pink', 'pink'],
-    ['pink', 'orange', 'white', 'white'],
-    ['orange', 'pink', 'orange', 'white'],
-    ['pink', 'white', 'orange', 'pink'],
+    'pink', 'pink', 'pink', 'pink', 'pink', 'orange', 'white', 'white',
+    'orange', 'pink', 'orange', 'white', 'pink', 'white', 'orange', 'pink',
   ],
   [
-    emptyWagon,
-    [null, null, 'white', 'white'],
-    ['white', 'white', 'pink', 'pink'],
-    ['white', 'orange', 'white', 'pink'],
+    'white', 'white', 'white', 'white', 'pink', 'pink',
+    'white', 'orange', 'white', 'pink',
   ],
   [
-    emptyWagon,
-    ['orange', 'pink', 'pink', 'orange'],
-    ['white', 'white', 'orange', 'pink'],
-    ['orange', 'white', 'pink', 'pink'],
+    'orange', 'pink', 'pink', 'orange', 'white', 'white',
+    'orange', 'pink', 'orange', 'white', 'pink', 'pink',
   ],
 ];
 
@@ -52,19 +38,20 @@ function createConveyor(): Graphics {
     .roundRect(60, 74, 240, 178, 17).fill(0x181436);
 }
 
-function addBus(board: Container, x: number, wagons: Bus, art: TruckArt): void {
+function addTruck(board: Container, x: number, blocks: readonly BlockColor[], art: TruckArt): void {
   const top = 304;
   const body = new Sprite(art.body);
   body.position.set(x - 2, top - 2);
   board.addChild(body);
 
   const cargoX = x + 6;
-  const cargoY = top + 7;
-  wagons.flat().forEach((color, index) => {
-    if (color === null) return;
-
+  const cargoHeight = 271;
+  const blockHeight = cargoHeight / truckCapacity;
+  const firstBlockY = top + (truckCapacity - blocks.length) * blockHeight;
+  blocks.forEach((color, index) => {
     const block = new Sprite(art.blocks[color]);
-    block.position.set(cargoX, cargoY + index * blockHeight);
+    block.height = blockHeight;
+    block.position.set(cargoX, firstBlockY + index * blockHeight);
     board.addChild(block);
   });
 }
@@ -73,8 +60,8 @@ export function createBoard(art: TruckArt): Container {
   const board = new Container();
   board.addChild(createConveyor());
 
-  buses.forEach((bus, index) => {
-    addBus(board, 40 + index * 48, bus, art);
+  truckLoads.forEach((blocks, index) => {
+    addTruck(board, 40 + index * 48, blocks, art);
   });
 
   return board;

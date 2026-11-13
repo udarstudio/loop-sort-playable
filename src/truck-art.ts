@@ -22,7 +22,7 @@ export async function loadTruckArt(): Promise<TruckArt> {
   });
 
   return {
-    body: new Texture({ source, frame: new Rectangle(0, 0, 44, 273) }),
+    body: new Texture({ source, frame: new Rectangle(0, 0, 44, 297) }),
     blocks: {
       pink: blockTexture(0),
       orange: blockTexture(17),
