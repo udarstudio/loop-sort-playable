@@ -10,10 +10,12 @@ export const boardWidth = 360;
 export const boardHeight = 656;
 
 const truckCapacity = 16;
-const blocksPerColor = 32;
 const truckTop = 302;
+const parkingDuration = 3500;
+const parkingTurn = Math.PI / 180;
+type ParkingArrival = { distance: number; delay: number };
 
-function createTruckLoads(): BlockColor[][] {
+function createTruckLoads(blocksPerColor: number): BlockColor[][] {
   const blocks = blockColors.flatMap((color) => Array<BlockColor>(blocksPerColor).fill(color));
 
   for (let index = blocks.length - 1; index > 0; index--) {
@@ -52,24 +54,32 @@ type PartialBlock = {
 
 function addTruck(
   board: Container, x: number, blocks: readonly BlockColor[], art: TruckArt,
-  conveyor: ConveyorInput, events: TruckEvents,
+  conveyor: ConveyorInput, events: TruckEvents, arrival?: ParkingArrival,
 ) {
+  const truck = board.addChild(new Container());
+  truck.visible = !arrival;
+  let parkingElapsed = -(arrival?.delay ?? 0);
+
   const body = new Sprite(art.body);
   body.position.set(x - 2, truckTop);
-  board.addChild(body);
+  truck.addChild(body);
+  const centerX = body.x + body.width / 2;
+  const centerY = truckTop + body.height / 2;
+  truck.pivot.set(centerX, centerY);
+  truck.position.set(centerX, centerY + (arrival?.distance ?? 0));
 
   const cargoX = x + 6;
   const cargoHeight = 271;
   const blockHeight = cargoHeight / truckCapacity;
   const cargoBottom = truckTop + 2 + cargoHeight;
   const firstBlockY = cargoBottom - blocks.length * blockHeight;
-  const distance = conveyorEntryDistance(body.x + body.width / 2);
+  const distance = conveyorEntryDistance(centerX);
   const loading: PartialBlock[] = [];
   const cargo = blocks.map((color, index) => {
     const block = new Sprite(art.blocks[color]);
     block.height = blockHeight;
     block.position.set(cargoX, firstBlockY + index * blockHeight);
-    return board.addChild(block);
+    return truck.addChild(block);
   });
 
   function updateBody(): boolean {
@@ -80,10 +90,10 @@ function addTruck(
   }
   updateBody();
 
-  body.eventMode = 'static';
+  body.eventMode = arrival ? 'none' : 'static';
   body.cursor = 'pointer';
   body.on('pointertap', ({ button }) => {
-    if (button !== 0 || conveyor.isUnloading(distance)) return;
+    if (button !== 0 || body.eventMode !== 'static' || conveyor.isUnloading(distance)) return;
     if (loading.some((block) => block.landed < block.pieces.length)) return;
     if (unload()) events.onUnload();
   });
@@ -121,7 +131,7 @@ function addTruck(
   }
 
   function receive(piece: Piece): boolean {
-    if (conveyor.isUnloading(distance)) return false;
+    if (body.eventMode !== 'static' || conveyor.isUnloading(distance)) return false;
     const texture = piece.sprite.texture;
     let block = loading.at(-1);
     const topColor = (block?.sprite ?? cargo[0])?.texture;
@@ -141,7 +151,23 @@ function addTruck(
     return true;
   }
 
-  function advance(deltaMS: number): boolean {
+  function advance(deltaMS: number, parkingStarted: boolean): boolean {
+    if (arrival && body.eventMode !== 'static') {
+      if (!parkingStarted) return false;
+      parkingElapsed += deltaMS;
+      if (parkingElapsed <= 0) return false;
+      truck.visible = true;
+      const progress = Math.min(1, parkingElapsed / parkingDuration);
+      truck.y = centerY + arrival.distance * (1 - progress) ** 2;
+      if (progress === 1) {
+        truck.rotation = 0;
+        body.eventMode = 'static';
+      } else {
+        truck.rotation = parkingTurn * Math.sin(Math.PI * progress) ** 2;
+      }
+      return false;
+    }
+
     let pieceLanded = false;
     for (const block of loading) {
       for (let index = block.landed; index < block.pieces.length; index++) {
@@ -159,7 +185,7 @@ function addTruck(
     while (loading[0]?.landed === piecesPerBlock) {
       const block = loading.shift()!;
       for (const { piece } of block.pieces) piece.sprite.destroy();
-      cargo.unshift(board.addChild(block.sprite));
+      cargo.unshift(truck.addChild(block.sprite));
       if (cargo.length === truckCapacity && updateBody()) events.onComplete();
     }
     return pieceLanded;
@@ -168,10 +194,14 @@ function addTruck(
   return { distance, receive, advance };
 }
 
-export function createBoard(art: TruckArt, conveyor: ConveyorInput, events: TruckEvents) {
+export function createBoard(
+  art: TruckArt, conveyor: ConveyorInput, events: TruckEvents, entranceY = boardHeight, staged = false,
+) {
   const board = new Container();
   const factory = createFactory(boardWidth / 2, 161);
-  const loads = createTruckLoads();
+  const firstGroup = createTruckLoads(staged ? truckCapacity : 2 * truckCapacity);
+  const secondGroup = staged ? createTruckLoads(truckCapacity) : [];
+  const loads = [...firstGroup, ...secondGroup];
   const truckSpacing = 48;
   const firstTruckX = 40;
   const firstTruckCenter = firstTruckX - 2 + art.body.width / 2;
@@ -183,17 +213,37 @@ export function createBoard(art: TruckArt, conveyor: ConveyorInput, events: Truc
     factory.view,
   );
 
-  const trucks = loads.map((blocks, index) =>
-    addTruck(board, firstTruckX + index * truckSpacing, blocks, art, conveyor, events));
+  const lanes = loads.map((_, index) => index);
+  if (staged) {
+    for (let index = lanes.length - 1; index > 0; index--) {
+      const swapIndex = Math.floor(Math.random() * (index + 1));
+      [lanes[index], lanes[swapIndex]] = [lanes[swapIndex], lanes[index]];
+    }
+  }
+  let parkingStarted = false;
+  const truckEvents = {
+    ...events,
+    onComplete() {
+      parkingStarted = true;
+      events.onComplete();
+    },
+  };
+  const trucks = loads.map((blocks, index) => {
+    const arrival = index >= firstGroup.length
+      ? { distance: entranceY - truckTop, delay: (index - firstGroup.length) * parkingDuration }
+      : undefined;
+    return addTruck(board, firstTruckX + lanes[index] * truckSpacing, blocks, art, conveyor, truckEvents, arrival);
+  });
 
   return {
     view: board,
     receivers: trucks,
     advanceFactory: factory.advance,
     advance(deltaMS: number) {
+      const canArrive = parkingStarted;
       let pieceLanded = false;
       for (const truck of trucks) {
-        if (truck.advance(deltaMS)) pieceLanded = true;
+        if (truck.advance(deltaMS, canArrive)) pieceLanded = true;
       }
       if (pieceLanded) events.onPieceLanded();
     },

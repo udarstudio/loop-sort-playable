@@ -14,3 +14,20 @@ npm run dev
 ```
 
 Run `npm run typecheck` to check TypeScript. Run `npm run build` to produce the web build in `dist/`, then `npm run preview` to serve it locally.
+
+## AppLovin HTML build
+
+```sh
+npm run build:applovin
+```
+
+Open `dist/applovin/index.html` to test the standalone playable. The build embeds the scripts, styles, images, fonts, and audio in the HTML and checks it against AppLovin’s 5 MB limit. It uses the playable options in `.env`.
+
+## Playable options
+
+Edit `.env` to configure the playable.
+
+- `VITE_STAGED_TRUCKS=false` starts with all six trucks parked.
+- `VITE_STAGED_TRUCKS=true` starts with three trucks. The other three arrive after you complete your first truck.
+
+Restart `npm run dev` after editing `.env`. Run `npm run build` again to include your settings in the production build.

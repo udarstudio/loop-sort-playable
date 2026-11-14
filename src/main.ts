@@ -80,19 +80,22 @@ async function startPlayable(mount: HTMLElement): Promise<void> {
   board.style.setProperty('--board-aspect', String(boardWidth / boardHeight));
   mount.appendChild(board);
 
-  function getRenderScale(): number {
-    const displayWidth = board.getBoundingClientRect().width;
+  function getRenderSize() {
+    const { width, top } = board.getBoundingClientRect();
     const pixelRatio = Math.min(window.devicePixelRatio, 3);
-    return Math.min(maxRenderScale, Math.max(1, displayWidth * pixelRatio / boardWidth));
+    const resolution = Math.min(maxRenderScale, Math.max(1, width * pixelRatio / boardWidth));
+    const visibleHeight = mount.getBoundingClientRect().bottom - top;
+    const height = Math.max(boardHeight, Math.ceil(visibleHeight * boardWidth / (width || boardWidth)));
+    return { height, resolution };
   }
 
+  const initialSize = getRenderSize();
   const [truckArt] = await Promise.all([
     loadTruckArt(),
     app.init({
       width: boardWidth,
-      height: boardHeight,
-      background: 0x1c173c,
-      resolution: getRenderScale(),
+      ...initialSize,
+      backgroundAlpha: 0,
       antialias: true,
       autoStart: false,
       preference: ['webgl', 'canvas'],
@@ -111,7 +114,8 @@ async function startPlayable(mount: HTMLElement): Promise<void> {
   const flow = createConveyorFlow();
   const sounds = createTruckSounds();
   const cargo = createConveyorCargo(showCapacity, sounds.onPieceDeparture);
-  const scene = createBoard(truckArt, cargo, sounds);
+  const staged = import.meta.env.VITE_STAGED_TRUCKS === 'true';
+  const scene = createBoard(truckArt, cargo, sounds, getRenderSize().height, staged);
   app.stage.addChild(scene.view, flow.view, cargo.view);
   app.ticker.maxFPS = 30;
   app.ticker.add(({ deltaMS }) => {
@@ -124,15 +128,18 @@ async function startPlayable(mount: HTMLElement): Promise<void> {
   board.append(app.canvas, capacity);
   addBackgroundMusic(board);
 
+  let renderedSize = initialSize;
   function resizeCanvas(): void {
-    const scale = getRenderScale();
-    if (scale !== app.renderer.resolution) {
-      app.renderer.resize(boardWidth, boardHeight, scale);
+    const size = getRenderSize();
+    if (size.height !== renderedSize.height || size.resolution !== renderedSize.resolution) {
+      app.renderer.resize(boardWidth, size.height, size.resolution);
+      renderedSize = size;
     }
   }
 
   new ResizeObserver(resizeCanvas).observe(board);
   window.addEventListener('resize', resizeCanvas);
+  resizeCanvas();
   app.render();
   app.start();
 }

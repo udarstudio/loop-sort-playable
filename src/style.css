@@ -59,14 +59,17 @@ main {
 }
 
 canvas {
+  position: absolute;
+  inset: 0 auto auto 0;
+  z-index: 1;
   display: block;
   width: 100%;
-  height: 100%;
-  object-fit: contain;
+  height: auto;
 }
 
 .conveyor-capacity {
   position: absolute;
+  z-index: 2;
   top: 33.08%;
   left: 50%;
   transform: translate(-50%, -50%);
