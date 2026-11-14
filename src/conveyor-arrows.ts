@@ -14,7 +14,7 @@ export function createConveyorFlow() {
       2 * arrowAltitude / 3, 0,
       -arrowAltitude / 3, arrowSide / 2,
     ])
-    .fill({ color: 0xe1d4ff, alpha: 0.2 });
+    .fill({ color: 0xffffff, alpha: 0.2 });
   const arrows = Array.from({ length: arrowCount }, () => view.addChild(new Graphics(triangle)));
   const spacing = loopLength / arrowCount;
   let offset = 0;

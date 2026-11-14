@@ -18,16 +18,20 @@ body {
 }
 
 main {
+  --board-width: min(100vw, calc(100vh * var(--board-aspect)));
   display: grid;
   place-items: center;
   height: 100vh;
   height: 100dvh;
 }
 
+@supports (height: 100dvh) {
+  main { --board-width: min(100vw, calc(100dvh * var(--board-aspect))); }
+}
+
 .board {
   position: relative;
-  width: min(100vw, calc(100vh * var(--board-aspect)));
-  width: min(100vw, calc(100dvh * var(--board-aspect)));
+  width: var(--board-width);
   aspect-ratio: var(--board-aspect);
   container-type: inline-size;
 }
@@ -73,8 +77,10 @@ canvas {
   top: 33.08%;
   left: 50%;
   transform: translate(-50%, -50%);
-  display: grid;
-  place-items: center;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 1.25cqw;
   width: 25%;
   aspect-ratio: 274 / 98;
   background: url('./assets/capacity-bg.png') center / contain no-repeat;
@@ -83,4 +89,56 @@ canvas {
   font-variant-numeric: tabular-nums;
   line-height: 1;
   text-shadow: 0 1px 2px #17122e;
+  white-space: nowrap;
+}
+
+.conveyor-capacity::before {
+  content: '';
+  flex: 0 0 4.8cqw;
+  aspect-ratio: 60 / 65;
+  background: url('./assets/cube-shape.png') center / contain no-repeat;
+}
+
+.playable-hand {
+  z-index: 3;
+  width: calc(var(--board-width) * 0.16);
+  translate: -8% -8%;
+  transform-origin: 8% 8%;
+  pointer-events: none;
+  filter: drop-shadow(1px 3px 3px #17122eaa);
+}
+
+.tutorial-hand {
+  position: absolute;
+  animation: tutorial-tap 1.2s ease-in-out infinite;
+}
+
+@keyframes tutorial-tap {
+  0%, 100% { transform: translate(0, 0); }
+  50% { transform: translate(5%, 5%); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .tutorial-hand { animation: none; }
+}
+
+.mouse-hand {
+  --turn: 0deg;
+  position: fixed;
+  /* Offset from the fingertip to the palm and back to keep the palm in place. */
+  transform: translate(50%, 49%) rotate(var(--turn)) translate(-50%, -49%);
+  transition: transform 120ms ease-out;
+}
+
+.mouse-hand.is-pressed {
+  --turn: -12deg;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .mouse-hand { transition: none; }
+}
+
+.show-mouse-hand,
+.show-mouse-hand * {
+  cursor: none !important;
 }

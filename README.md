@@ -29,5 +29,8 @@ Edit `.env` to configure the playable.
 
 - `VITE_STAGED_TRUCKS=false` starts with all six trucks parked.
 - `VITE_STAGED_TRUCKS=true` starts with three trucks. The other three arrive after you complete your first truck.
+- `VITE_HAND_MODE=tutorial` starts with a hand pointing to a random truck. After three seconds without input, it returns to that lane when the truck can unload, even with one block left. The tutorial ends for that run once the truck is empty or full of one color.
+- `VITE_HAND_MODE=mouse` replaces the mouse cursor with the hand inside the playable for recording.
+- `VITE_HAND_MODE=disabled` keeps the regular cursor and hides the tutorial hand.
 
 Restart `npm run dev` after editing `.env`. Run `npm run build` again to include your settings in the production build.

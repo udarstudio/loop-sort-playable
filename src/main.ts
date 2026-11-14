@@ -7,6 +7,7 @@ import truckCompleteUrl from './assets/sfx-powerup-bright-1.mp3';
 import { boardHeight, boardWidth, createBoard } from './board';
 import { createConveyorFlow } from './conveyor-arrows';
 import { conveyorCapacity, createConveyorCargo } from './conveyor-cargo';
+import { addMouseHand, addTutorialHand } from './hand';
 import { loadTruckArt } from './truck-art';
 import './style.css';
 
@@ -77,7 +78,7 @@ async function startPlayable(mount: HTMLElement): Promise<void> {
   const app = new Application();
   const board = document.createElement('div');
   board.className = 'board';
-  board.style.setProperty('--board-aspect', String(boardWidth / boardHeight));
+  mount.style.setProperty('--board-aspect', String(boardWidth / boardHeight));
   mount.appendChild(board);
 
   function getRenderSize() {
@@ -116,6 +117,13 @@ async function startPlayable(mount: HTMLElement): Promise<void> {
   const cargo = createConveyorCargo(showCapacity, sounds.onPieceDeparture);
   const staged = import.meta.env.VITE_STAGED_TRUCKS === 'true';
   const scene = createBoard(truckArt, cargo, sounds, getRenderSize().height, staged);
+  board.append(app.canvas, capacity);
+  addBackgroundMusic(board);
+
+  const handMode = import.meta.env.VITE_HAND_MODE;
+  const updateHand = handMode === 'tutorial' ? addTutorialHand(board, scene.receivers, boardWidth, boardHeight) : undefined;
+  if (handMode === 'mouse') addMouseHand(mount);
+
   app.stage.addChild(scene.view, flow.view, cargo.view);
   app.ticker.maxFPS = 30;
   app.ticker.add(({ deltaMS }) => {
@@ -123,10 +131,8 @@ async function startPlayable(mount: HTMLElement): Promise<void> {
     const distance = cargo.advance(deltaMS, scene.receivers);
     flow.advance(distance);
     scene.advanceFactory(distance);
+    updateHand?.();
   });
-
-  board.append(app.canvas, capacity);
-  addBackgroundMusic(board);
 
   let renderedSize = initialSize;
   function resizeCanvas(): void {
