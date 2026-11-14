@@ -162,7 +162,7 @@ function addTruck(
 
   function receive(piece: Piece): boolean {
     if (body.eventMode !== 'static' || conveyor.isUnloading(distance)) return false;
-    const texture = piece.sprite.texture;
+    const texture = piece.blockTexture;
     let block = loading.at(-1);
     const topColor = (block?.sprite ?? cargo[0])?.texture;
     if (topColor && topColor !== texture) return false;

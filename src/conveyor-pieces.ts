@@ -1,20 +1,22 @@
 import { Rectangle, Sprite, Texture } from 'pixi.js';
 import { loopLength, positionOnConveyor } from './conveyor-path';
+import { getLoosePieceTexture } from './truck-art';
 
 const columns = 4;
 const rows = 4;
 export const piecesPerBlock = columns * rows;
 export const pieceFlightDuration = 300;
 const beltLanes = 3;
-const pieceSize = 10;
+const pieceSize = 11;
+const pieceWidth = 12;
 const collisionDiameter = pieceSize;
-const beltHalfWidth = 15;
-const laneLimit = beltHalfWidth - Math.SQRT2 * pieceSize / 2;
+const laneLimit = 8;
 const blockTiles = new WeakMap<Texture, Texture[]>();
 const tileBlocks = new WeakMap<Texture, Texture>();
 
 export type Piece = {
   sprite: Sprite;
+  blockTexture: Texture;
   distance: number;
   lane: number;
   forwardVelocity: number;
@@ -88,7 +90,7 @@ export function launchPiece(sprite: Sprite, entry: number, index: number, count:
   const offset = (Math.floor(index / beltLanes) - (piecesInLane - 1) / 2) * pieceSize
     + (Math.random() - 0.5) * 3;
   return {
-    sprite, from: readPose(sprite),
+    sprite, blockTexture: tileBlocks.get(sprite.texture) ?? sprite.texture, from: readPose(sprite),
     distance: wrapDistance(entry + offset),
     lane: (laneIndex - 1) * laneLimit,
     speedFactor: 0.84 + Math.random() * 0.32,
@@ -145,8 +147,8 @@ export function renderPiece(piece: Piece, progress: number, launching: boolean):
   const y = sprite.y + Math.cos(heading) * lane;
   const rotation = Math.sin(piece.distance * 0.08 + piece.driftPhase) * 0.45 + piece.laneVelocity * 0.025;
   if (launching) {
-    if (progress === 1) sprite.texture = tileBlocks.get(sprite.texture) ?? sprite.texture;
-    animatePieceFlight(piece, x, y, pieceSize, pieceSize, rotation, progress);
+    if (progress === 1) sprite.texture = getLoosePieceTexture(piece.blockTexture);
+    animatePieceFlight(piece, x, y, pieceWidth, pieceSize, rotation, progress);
   } else {
     sprite.position.set(x, y);
     sprite.rotation = rotation;
