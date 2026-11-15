@@ -14,21 +14,65 @@ export const boardHeight = 656;
 
 const truckCapacity = 16;
 const truckTop = 302;
-const stagedParkingDuration = 3500;
-const parkingTurn = Math.PI / 180;
+const openingArrivalDuration = openingDriveDuration + openingSettleDuration;
+const openingHeadlightHoldDuration = 300;
 const unloadHopDuration = 180;
 const completionRollDuration = 1200;
 const completionRollDistance = 22;
-type ParkingArrival = { distance: number; delay: number; kind: 'opening' | 'staged' };
+type OpeningArrival = { distance: number; delay: number };
 
-function createTruckLoads(blocksPerColor: number): BlockColor[][] {
-  const blocks = blockColors.flatMap((color) => Array<BlockColor>(blocksPerColor).fill(color));
-
-  for (let index = blocks.length - 1; index > 0; index--) {
+function shuffle<T>(items: T[]): T[] {
+  for (let index = items.length - 1; index > 0; index--) {
     const swapIndex = Math.floor(Math.random() * (index + 1));
-    [blocks[index], blocks[swapIndex]] = [blocks[swapIndex], blocks[index]];
+    [items[index], items[swapIndex]] = [items[swapIndex], items[index]];
+  }
+  return items;
+}
+
+function createTruckLoads(easyStart: boolean): BlockColor[][] {
+  if (easyStart) {
+    const blocker = blockColors[Math.floor(Math.random() * blockColors.length)];
+    const matches = blockColors.filter((color) => color !== blocker);
+    if (Math.random() < 0.5) matches.reverse();
+
+    const [firstMatch, secondMatch] = matches;
+    return shuffle([
+      [
+        ...Array<BlockColor>(4).fill(blocker),
+        firstMatch, firstMatch,
+        secondMatch, secondMatch,
+        ...Array<BlockColor>(3).fill(firstMatch),
+        ...Array<BlockColor>(5).fill(secondMatch),
+      ],
+      [blocker, ...Array<BlockColor>(truckCapacity - 1).fill(firstMatch)],
+      [
+        firstMatch,
+        blocker, blocker,
+        ...Array<BlockColor>(3).fill(secondMatch),
+        ...Array<BlockColor>(7).fill(firstMatch),
+        ...Array<BlockColor>(3).fill(secondMatch),
+      ],
+      [
+        secondMatch, secondMatch,
+        ...Array<BlockColor>(3).fill(blocker),
+        ...Array<BlockColor>(4).fill(firstMatch),
+        ...Array<BlockColor>(7).fill(blocker),
+      ],
+      [
+        ...Array<BlockColor>(3).fill(secondMatch),
+        ...Array<BlockColor>(3).fill(blocker),
+        ...Array<BlockColor>(10).fill(secondMatch),
+      ],
+      [
+        secondMatch,
+        blocker, blocker,
+        ...Array<BlockColor>(3).fill(secondMatch),
+        ...Array<BlockColor>(10).fill(blocker),
+      ],
+    ]);
   }
 
+  const blocks = shuffle(blockColors.flatMap((color) => Array<BlockColor>(2 * truckCapacity).fill(color)));
   return Array.from({ length: blocks.length / truckCapacity }, (_, index) => {
     const start = index * truckCapacity;
     return blocks.slice(start, start + truckCapacity);
@@ -60,17 +104,20 @@ type PartialBlock = {
 
 function addTruck(
   board: Container, x: number, blocks: readonly BlockColor[], art: TruckArt,
-  conveyor: ConveyorInput, events: TruckEvents, arrival?: ParkingArrival,
+  conveyor: ConveyorInput, events: TruckEvents, arrival?: OpeningArrival,
 ) {
   const truck = board.addChild(new Container());
   truck.visible = !arrival;
   let parkingElapsed = -(arrival?.delay ?? 0);
-  const parkingDuration = arrival?.kind === 'opening' ? openingDriveDuration + openingSettleDuration : stagedParkingDuration;
+  let openingHeadlightTimeLeft = arrival ? openingHeadlightHoldDuration : 0;
   let unloadHopElapsed = unloadHopDuration;
 
   const body = new Sprite(art.body);
   body.position.set(x - 2, truckTop);
   truck.addChild(body);
+  const headlights = truck.addChild(createTruckHeadlights());
+  headlights.position.copyFrom(body.position);
+  headlights.alpha = arrival ? 1 : 0;
   const centerX = body.x + body.width / 2;
   const centerY = truckTop + body.height / 2;
   truck.pivot.set(centerX, centerY);
@@ -95,22 +142,17 @@ function addTruck(
   }
 
   let cover: ReturnType<typeof createTruckCover> | undefined;
-  let headlights: Graphics | undefined;
   let completionElapsed = 0;
   function completeTruck(animate: boolean): void {
     body.eventMode = 'none';
     body.cursor = 'default';
     const texture = cargo[0].texture;
-    body.texture = art.completedBodies.get(texture) ?? art.body;
     const color = blockColors.find((color) => art.blocks[color] === texture);
     if (!color) return;
     cover = createTruckCover(color, cargo[0].width, cargoHeight, animate);
     cover.view.position.set(cargoX, cargoBottom - cargoHeight);
     truck.addChild(cover.view);
-    headlights = createTruckHeadlights();
-    headlights.position.copyFrom(body.position);
     headlights.alpha = animate ? 0 : 1;
-    truck.addChildAt(headlights, 1);
     completionElapsed = animate ? 0 : completionRollDuration;
     if (!animate && !arrival) truck.y = centerY + completionRollDistance;
   }
@@ -183,34 +225,23 @@ function addTruck(
     return true;
   }
 
-  function advance(deltaMS: number, parkingStarted: boolean): boolean {
-    if (arrival && parkingElapsed < parkingDuration) {
-      if (arrival.kind === 'staged' && !parkingStarted) return false;
-      parkingElapsed = Math.min(parkingDuration, parkingElapsed + deltaMS);
+  function advance(deltaMS: number): boolean {
+    if (arrival && parkingElapsed < openingArrivalDuration) {
+      parkingElapsed = Math.min(openingArrivalDuration, parkingElapsed + deltaMS);
       if (parkingElapsed <= 0) return false;
       truck.visible = true;
       const parkedY = centerY + (cover ? completionRollDistance : 0);
-      if (arrival.kind === 'opening') {
-        const drive = Math.min(1, parkingElapsed / openingDriveDuration);
-        const settle = Math.max(0, (parkingElapsed - openingDriveDuration) / openingSettleDuration);
-        const travel = drive * (0.85 + 0.15 * drive);
-        const rebound = -16 * Math.sin(2 * Math.PI * settle) * (1 - settle) ** 2;
-        truck.y = parkedY + (centerY + arrival.distance - parkedY) * (1 - travel) + rebound;
-      } else {
-        const progress = parkingElapsed / parkingDuration;
-        truck.y = parkedY + (centerY + arrival.distance - parkedY) * (1 - progress) ** 2;
-        truck.rotation = parkingTurn * Math.sin(Math.PI * progress) ** 2;
-      }
-
-      if (parkingElapsed === parkingDuration) {
-        truck.rotation = 0;
-        if (!isComplete()) body.eventMode = 'static';
-      }
+      const drive = Math.min(1, parkingElapsed / openingDriveDuration);
+      const settle = Math.max(0, (parkingElapsed - openingDriveDuration) / openingSettleDuration);
+      const travel = drive * (0.85 + 0.15 * drive);
+      const rebound = -16 * Math.sin(2 * Math.PI * settle) * (1 - settle) ** 2;
+      truck.y = parkedY + (centerY + arrival.distance - parkedY) * (1 - travel) + rebound;
+      if (!cover && parkingElapsed === openingArrivalDuration) body.eventMode = 'static';
       return false;
     }
 
-    if (headlights) {
-      cover?.advance(deltaMS);
+    if (cover) {
+      cover.advance(deltaMS);
       if (completionElapsed < completionRollDuration) {
         completionElapsed = Math.min(completionRollDuration, completionElapsed + deltaMS);
         const progress = completionElapsed / completionRollDuration;
@@ -218,6 +249,11 @@ function addTruck(
         headlights.alpha = Math.min(1, completionElapsed / 150);
       }
       return false;
+    }
+
+    if (openingHeadlightTimeLeft > 0) {
+      openingHeadlightTimeLeft = Math.max(0, openingHeadlightTimeLeft - deltaMS);
+      if (openingHeadlightTimeLeft === 0) headlights.alpha = 0;
     }
 
     if (unloadHopElapsed < unloadHopDuration) {
@@ -267,13 +303,11 @@ function addTruck(
 
 export function createBoard(
   art: TruckArt, conveyor: ConveyorInput, events: TruckEvents,
-  { entranceY, staged, opening }: { entranceY: number; staged: boolean; opening: boolean },
+  { entranceY, opening, easyStart }: { entranceY: number; opening: boolean; easyStart: boolean },
 ) {
   const board = new Container();
   const factory = createFactory(boardWidth / 2, 161);
-  const firstGroup = createTruckLoads(staged ? truckCapacity : 2 * truckCapacity);
-  const secondGroup = staged ? createTruckLoads(truckCapacity) : [];
-  const loads = [...firstGroup, ...secondGroup];
+  const loads = createTruckLoads(easyStart);
   const truckSpacing = 48;
   const firstTruckX = 40;
   const firstTruckCenter = firstTruckX - 2 + art.body.width / 2;
@@ -286,47 +320,24 @@ export function createBoard(
     factory.view,
   );
 
-  const lanes = loads.map((_, index) => index);
-  if (staged) {
-    for (let index = lanes.length - 1; index > 0; index--) {
-      const swapIndex = Math.floor(Math.random() * (index + 1));
-      [lanes[index], lanes[swapIndex]] = [lanes[swapIndex], lanes[index]];
-    }
-  }
-  const middleLane = (lanes.length - 1) / 2;
-  const openingOrder = lanes.slice(0, firstGroup.length)
+  const middleLane = (loads.length - 1) / 2;
+  const openingOrder = loads.map((_, lane) => lane)
     .sort((left, right) => Math.abs(left - middleLane) - Math.abs(right - middleLane));
-  let parkingStarted = false;
-  const truckEvents = {
-    ...events,
-    onComplete() {
-      parkingStarted = true;
-      events.onComplete();
-    },
-  };
-  const trucks = loads.map((blocks, index) => {
-    const lane = lanes[index];
-    const distance = entranceY - truckTop;
-    let arrival: ParkingArrival | undefined;
-    if (index >= firstGroup.length) {
-      arrival = { kind: 'staged', distance, delay: (index - firstGroup.length) * stagedParkingDuration };
-    } else if (opening) {
-      arrival = { kind: 'opening', distance, delay: openingOrder.indexOf(lane) * openingStagger };
-    }
-    return addTruck(board, firstTruckX + lane * truckSpacing, blocks, art, conveyor, truckEvents, arrival);
+  const trucks = loads.map((blocks, lane) => {
+    const arrival = opening
+      ? { distance: entranceY - truckTop, delay: openingOrder.indexOf(lane) * openingStagger }
+      : undefined;
+    return addTruck(board, firstTruckX + lane * truckSpacing, blocks, art, conveyor, events, arrival);
   });
-  parkingStarted = staged && trucks.slice(0, firstGroup.length).some((truck) => truck.isComplete());
 
   return {
     view: board,
     receivers: trucks,
-    openingTruckCount: firstGroup.length,
     advanceFactory: factory.advance,
-    advance(deltaMS: number, openingInProgress: boolean) {
-      const canArrive = parkingStarted && !openingInProgress;
+    advance(deltaMS: number) {
       let pieceLanded = false;
       for (const truck of trucks) {
-        if (truck.advance(deltaMS, canArrive)) pieceLanded = true;
+        if (truck.advance(deltaMS)) pieceLanded = true;
       }
       if (pieceLanded) events.onPieceLanded();
     },

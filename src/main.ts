@@ -116,9 +116,9 @@ async function startPlayable(mount: HTMLElement): Promise<void> {
   const flow = createConveyorFlow();
   const sounds = createTruckSounds();
   const cargo = createConveyorCargo(showCapacity, sounds.onPieceDeparture);
-  const staged = import.meta.env.VITE_STAGED_TRUCKS === 'true';
   const opening = !window.matchMedia('(prefers-reduced-motion: reduce)').matches;
-  const scene = createBoard(truckArt, cargo, sounds, { entranceY: getRenderSize().height, staged, opening });
+  const easyStart = import.meta.env.VITE_EASY_START === 'true';
+  const scene = createBoard(truckArt, cargo, sounds, { entranceY: getRenderSize().height, opening, easyStart });
   board.append(app.canvas, capacity);
   addBackgroundMusic(board);
 
@@ -130,12 +130,11 @@ async function startPlayable(mount: HTMLElement): Promise<void> {
 
   const world = app.stage.addChild(new Container());
   world.addChild(scene.view, flow.view, cargo.view);
-  let advanceOpening = opening ? startOpening(world, board, capacity, boardWidth, scene.openingTruckCount) : undefined;
+  let advanceOpening = opening ? startOpening(world, board, capacity, boardWidth, scene.receivers.length) : undefined;
   let updateHand = opening ? undefined : showTutorialHand();
 
-  app.ticker.maxFPS = 30;
   app.ticker.add(({ deltaMS }) => {
-    scene.advance(deltaMS, Boolean(advanceOpening));
+    scene.advance(deltaMS);
     const distance = cargo.advance(deltaMS, scene.receivers);
     flow.advance(distance);
     scene.advanceFactory(distance);

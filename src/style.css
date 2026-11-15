@@ -18,15 +18,85 @@ body {
 }
 
 main {
-  --board-width: min(100vw, calc(100vh * var(--board-aspect)));
+  --viewport-height: 100vh;
+  --logo-width: clamp(100px, 29vw, 140px);
+  --logo-top: max(12px, env(safe-area-inset-top));
+  --logo-space: calc(var(--logo-top) + var(--logo-width) * 383 / 600);
+  --download-width: clamp(178px, 56vw, 232px);
+  --download-height: calc(var(--download-width) * 135 / 398);
+  --download-bottom: max(12px, env(safe-area-inset-bottom));
+  --download-space: calc(var(--download-height) + var(--download-bottom) + 8px);
+  --board-width: min(100vw, calc((var(--viewport-height) - var(--logo-space) - var(--download-space)) * var(--board-aspect)));
+  --road-inset: calc(var(--board-width) * 28 / 360);
+  box-sizing: border-box;
   display: grid;
   place-items: center;
-  height: 100vh;
-  height: 100dvh;
+  height: var(--viewport-height);
+  padding-top: var(--logo-space);
+  padding-bottom: var(--download-space);
 }
 
 @supports (height: 100dvh) {
-  main { --board-width: min(100vw, calc(100dvh * var(--board-aspect))); }
+  main { --viewport-height: 100dvh; }
+}
+
+.playable-logo {
+  position: fixed;
+  z-index: 2;
+  top: var(--logo-top);
+  left: 50%;
+  translate: -50% 0;
+  width: var(--logo-width);
+  height: auto;
+  pointer-events: none;
+}
+
+.download-cta {
+  position: fixed;
+  z-index: 2;
+  bottom: var(--download-bottom);
+  left: 50%;
+  translate: -50% 0;
+  display: grid;
+  place-items: center;
+  width: var(--download-width);
+  height: var(--download-height);
+  border: 0;
+  padding: 0;
+  background: url('./assets/download-button.png') center / 100% 100% no-repeat;
+  color: #fff;
+  opacity: 1;
+  font-family: inherit;
+  font-weight: inherit;
+  font-size: clamp(25px, 4.3vw, 34px);
+  line-height: 1;
+  -webkit-text-stroke: 3px #123303;
+  paint-order: stroke fill;
+  text-shadow: 0 2px 1px #123303;
+}
+
+@media (min-width: 720px) and (min-aspect-ratio: 4 / 3) and (hover: hover) {
+  main {
+    --corner-inset: clamp(16px, 2vw, 32px);
+    --logo-top: var(--corner-inset);
+    --logo-space: 0px;
+    --logo-width: min(204px, calc((100vw - var(--board-width)) / 2 - var(--corner-inset) - 12px));
+    --download-bottom: var(--corner-inset);
+    --download-space: 0px;
+    --download-side-space: calc((100vw - var(--board-width)) / 2 + var(--road-inset));
+    --download-width: min(250px, calc(var(--download-side-space) - var(--download-bottom) - 16px));
+  }
+
+  .playable-logo {
+    left: var(--corner-inset);
+    translate: none;
+  }
+
+  .download-cta {
+    right: var(--download-bottom);
+    left: auto;
+    translate: none;
+  }
 }
 
 .board {
@@ -47,7 +117,7 @@ main {
   content: '';
   position: absolute;
   top: 100%;
-  inset-inline: 7.777778%;
+  inset-inline: var(--road-inset);
   height: 50vh;
   /* Continue the canvas markings on viewports taller than the board. */
   background:
