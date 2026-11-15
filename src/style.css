@@ -71,6 +71,10 @@ canvas {
   height: auto;
 }
 
+.board.is-opening::after {
+  visibility: hidden;
+}
+
 .conveyor-capacity {
   position: absolute;
   z-index: 2;

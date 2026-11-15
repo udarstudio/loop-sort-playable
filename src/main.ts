@@ -1,6 +1,6 @@
 import 'pixi.js/graphics';
 import 'pixi.js/events';
-import { Application } from 'pixi.js';
+import { Application, Container } from 'pixi.js';
 import musicUrl from './assets/casual-music-loop-18.mp3';
 import piecePopUrl from './assets/pop-2.mp3';
 import truckCompleteUrl from './assets/sfx-powerup-bright-1.mp3';
@@ -8,6 +8,7 @@ import { boardHeight, boardWidth, createBoard } from './board';
 import { createConveyorFlow } from './conveyor-arrows';
 import { conveyorCapacity, createConveyorCargo } from './conveyor-cargo';
 import { addMouseHand, addTutorialHand } from './hand';
+import { startOpening } from './opening';
 import { loadTruckArt } from './truck-art';
 import './style.css';
 
@@ -116,22 +117,36 @@ async function startPlayable(mount: HTMLElement): Promise<void> {
   const sounds = createTruckSounds();
   const cargo = createConveyorCargo(showCapacity, sounds.onPieceDeparture);
   const staged = import.meta.env.VITE_STAGED_TRUCKS === 'true';
-  const scene = createBoard(truckArt, cargo, sounds, getRenderSize().height, staged);
+  const opening = !window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+  const scene = createBoard(truckArt, cargo, sounds, { entranceY: getRenderSize().height, staged, opening });
   board.append(app.canvas, capacity);
   addBackgroundMusic(board);
 
   const handMode = import.meta.env.VITE_HAND_MODE;
-  const updateHand = handMode === 'tutorial' ? addTutorialHand(board, scene.receivers, boardWidth, boardHeight) : undefined;
+  const showTutorialHand = () => handMode === 'tutorial'
+    ? addTutorialHand(board, scene.receivers, boardWidth, boardHeight)
+    : undefined;
   if (handMode === 'mouse') addMouseHand(mount);
 
-  app.stage.addChild(scene.view, flow.view, cargo.view);
+  const world = app.stage.addChild(new Container());
+  world.addChild(scene.view, flow.view, cargo.view);
+  let advanceOpening = opening ? startOpening(world, board, capacity, boardWidth, scene.openingTruckCount) : undefined;
+  let updateHand = opening ? undefined : showTutorialHand();
+
   app.ticker.maxFPS = 30;
   app.ticker.add(({ deltaMS }) => {
-    scene.advance(deltaMS);
+    scene.advance(deltaMS, Boolean(advanceOpening));
     const distance = cargo.advance(deltaMS, scene.receivers);
     flow.advance(distance);
     scene.advanceFactory(distance);
-    updateHand?.();
+    if (advanceOpening) {
+      if (!advanceOpening(deltaMS)) {
+        advanceOpening = undefined;
+        updateHand = showTutorialHand();
+      }
+    } else {
+      updateHand?.();
+    }
   });
 
   let renderedSize = initialSize;

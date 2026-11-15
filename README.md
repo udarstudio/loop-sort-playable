@@ -27,10 +27,12 @@ Open `dist/applovin/index.html` to test the standalone playable. The build embed
 
 Edit `.env` to configure the playable.
 
-- `VITE_STAGED_TRUCKS=false` starts with all six trucks parked.
-- `VITE_STAGED_TRUCKS=true` starts with three trucks. The other three arrive after you complete your first truck.
-- `VITE_HAND_MODE=tutorial` starts with a hand pointing to a random truck. After three seconds without input, it returns to that lane when the truck can unload, even with one block left. The tutorial ends for that run once the truck is empty or full of one color.
+- `VITE_STAGED_TRUCKS=false` brings all six trucks in during the opening camera pullback.
+- `VITE_STAGED_TRUCKS=true` brings three trucks in during the opening. The other three arrive after you complete your first truck.
+- `VITE_HAND_MODE=tutorial` shows a hand pointing to a random truck after the opening. After three seconds without input, it returns to that lane when the truck can unload, even with one block left. The tutorial ends for that run once the truck is empty or full of one color.
 - `VITE_HAND_MODE=mouse` replaces the mouse cursor with the hand inside the playable for recording.
 - `VITE_HAND_MODE=disabled` keeps the regular cursor and hides the tutorial hand.
+
+When reduced motion is enabled, the opening trucks start parked.
 
 Restart `npm run dev` after editing `.env`. Run `npm run build` again to include your settings in the production build.

@@ -3,6 +3,7 @@ import type { createConveyorCargo } from './conveyor-cargo';
 import { conveyorEntryDistance } from './conveyor-path';
 import { pieceFlightDuration, piecesPerBlock, preparePieceToStack, stackPiece, type Piece } from './conveyor-pieces';
 import { createFactory } from './factory';
+import { openingDriveDuration, openingSettleDuration, openingStagger } from './opening';
 import { blockColors, type BlockColor, type TruckArt } from './truck-art';
 import { createTruckCover } from './truck-cover';
 import { createTruckHeadlights } from './truck-headlights';
@@ -13,12 +14,12 @@ export const boardHeight = 656;
 
 const truckCapacity = 16;
 const truckTop = 302;
-const parkingDuration = 3500;
+const stagedParkingDuration = 3500;
 const parkingTurn = Math.PI / 180;
 const unloadHopDuration = 180;
 const completionRollDuration = 1200;
 const completionRollDistance = 22;
-type ParkingArrival = { distance: number; delay: number };
+type ParkingArrival = { distance: number; delay: number; kind: 'opening' | 'staged' };
 
 function createTruckLoads(blocksPerColor: number): BlockColor[][] {
   const blocks = blockColors.flatMap((color) => Array<BlockColor>(blocksPerColor).fill(color));
@@ -64,6 +65,7 @@ function addTruck(
   const truck = board.addChild(new Container());
   truck.visible = !arrival;
   let parkingElapsed = -(arrival?.delay ?? 0);
+  const parkingDuration = arrival?.kind === 'opening' ? openingDriveDuration + openingSettleDuration : stagedParkingDuration;
   let unloadHopElapsed = unloadHopDuration;
 
   const body = new Sprite(art.body);
@@ -183,18 +185,26 @@ function addTruck(
 
   function advance(deltaMS: number, parkingStarted: boolean): boolean {
     if (arrival && parkingElapsed < parkingDuration) {
-      if (!parkingStarted) return false;
-      parkingElapsed += deltaMS;
+      if (arrival.kind === 'staged' && !parkingStarted) return false;
+      parkingElapsed = Math.min(parkingDuration, parkingElapsed + deltaMS);
       if (parkingElapsed <= 0) return false;
       truck.visible = true;
-      const progress = Math.min(1, parkingElapsed / parkingDuration);
       const parkedY = centerY + (cover ? completionRollDistance : 0);
-      truck.y = parkedY + (centerY + arrival.distance - parkedY) * (1 - progress) ** 2;
-      if (progress === 1) {
+      if (arrival.kind === 'opening') {
+        const drive = Math.min(1, parkingElapsed / openingDriveDuration);
+        const settle = Math.max(0, (parkingElapsed - openingDriveDuration) / openingSettleDuration);
+        const travel = drive * (0.85 + 0.15 * drive);
+        const rebound = -16 * Math.sin(2 * Math.PI * settle) * (1 - settle) ** 2;
+        truck.y = parkedY + (centerY + arrival.distance - parkedY) * (1 - travel) + rebound;
+      } else {
+        const progress = parkingElapsed / parkingDuration;
+        truck.y = parkedY + (centerY + arrival.distance - parkedY) * (1 - progress) ** 2;
+        truck.rotation = parkingTurn * Math.sin(Math.PI * progress) ** 2;
+      }
+
+      if (parkingElapsed === parkingDuration) {
         truck.rotation = 0;
         if (!isComplete()) body.eventMode = 'static';
-      } else {
-        truck.rotation = parkingTurn * Math.sin(Math.PI * progress) ** 2;
       }
       return false;
     }
@@ -256,7 +266,8 @@ function addTruck(
 }
 
 export function createBoard(
-  art: TruckArt, conveyor: ConveyorInput, events: TruckEvents, entranceY = boardHeight, staged = false,
+  art: TruckArt, conveyor: ConveyorInput, events: TruckEvents,
+  { entranceY, staged, opening }: { entranceY: number; staged: boolean; opening: boolean },
 ) {
   const board = new Container();
   const factory = createFactory(boardWidth / 2, 161);
@@ -268,8 +279,9 @@ export function createBoard(
   const firstTruckCenter = firstTruckX - 2 + art.body.width / 2;
   const laneDividers = loads.slice(1).map((_, index) => firstTruckCenter + (index + 0.5) * truckSpacing);
   const roadMargin = 28;
+  const roadBottom = opening ? entranceY + 8 : boardHeight;
   board.addChild(
-    createTruckRoad(roadMargin, boardWidth - roadMargin, truckTop - 38, boardHeight, laneDividers),
+    createTruckRoad(roadMargin, boardWidth - roadMargin, truckTop - 38, roadBottom, laneDividers),
     createConveyor(),
     factory.view,
   );
@@ -281,6 +293,9 @@ export function createBoard(
       [lanes[index], lanes[swapIndex]] = [lanes[swapIndex], lanes[index]];
     }
   }
+  const middleLane = (lanes.length - 1) / 2;
+  const openingOrder = lanes.slice(0, firstGroup.length)
+    .sort((left, right) => Math.abs(left - middleLane) - Math.abs(right - middleLane));
   let parkingStarted = false;
   const truckEvents = {
     ...events,
@@ -290,19 +305,25 @@ export function createBoard(
     },
   };
   const trucks = loads.map((blocks, index) => {
-    const arrival = index >= firstGroup.length
-      ? { distance: entranceY - truckTop, delay: (index - firstGroup.length) * parkingDuration }
-      : undefined;
-    return addTruck(board, firstTruckX + lanes[index] * truckSpacing, blocks, art, conveyor, truckEvents, arrival);
+    const lane = lanes[index];
+    const distance = entranceY - truckTop;
+    let arrival: ParkingArrival | undefined;
+    if (index >= firstGroup.length) {
+      arrival = { kind: 'staged', distance, delay: (index - firstGroup.length) * stagedParkingDuration };
+    } else if (opening) {
+      arrival = { kind: 'opening', distance, delay: openingOrder.indexOf(lane) * openingStagger };
+    }
+    return addTruck(board, firstTruckX + lane * truckSpacing, blocks, art, conveyor, truckEvents, arrival);
   });
   parkingStarted = staged && trucks.slice(0, firstGroup.length).some((truck) => truck.isComplete());
 
   return {
     view: board,
     receivers: trucks,
+    openingTruckCount: firstGroup.length,
     advanceFactory: factory.advance,
-    advance(deltaMS: number) {
-      const canArrive = parkingStarted;
+    advance(deltaMS: number, openingInProgress: boolean) {
+      const canArrive = parkingStarted && !openingInProgress;
       let pieceLanded = false;
       for (const truck of trucks) {
         if (truck.advance(deltaMS, canArrive)) pieceLanded = true;
