@@ -6,10 +6,10 @@
 }
 
 :root {
-  color-scheme: dark;
+  color-scheme: light;
   font-family: Fredoka, system-ui, sans-serif;
   font-weight: 700;
-  background: #1c173c;
+  background: #c7bee4;
 }
 
 body {
@@ -27,7 +27,6 @@ main {
   --download-bottom: max(12px, env(safe-area-inset-bottom));
   --download-space: calc(var(--download-height) + var(--download-bottom) + 8px);
   --board-width: min(100vw, calc((var(--viewport-height) - var(--logo-space) - var(--download-space)) * var(--board-aspect)));
-  --road-inset: calc(var(--board-width) * 28 / 360);
   position: relative;
   box-sizing: border-box;
   display: grid;
@@ -84,7 +83,7 @@ main {
     --logo-width: min(204px, calc((100vw - var(--board-width)) / 2 - var(--corner-inset) - 12px));
     --download-bottom: var(--corner-inset);
     --download-space: 0px;
-    --download-side-space: calc((100vw - var(--board-width)) / 2 + var(--road-inset));
+    --download-side-space: calc((100vw - var(--board-width)) / 2 + var(--board-width) * 28 / 360);
     --download-width: min(250px, calc(var(--download-side-space) - var(--download-bottom) - 16px));
   }
 
@@ -120,8 +119,6 @@ main {
 .conveyor-capacity {
   position: absolute;
   z-index: 2;
-  top: 33.08%;
-  left: 50%;
   transform: translate(-50%, -50%);
   display: flex;
   align-items: center;

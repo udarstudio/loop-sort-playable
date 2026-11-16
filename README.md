@@ -2,7 +2,7 @@
 
 PixiJS and TypeScript prototype for the Voodoo playable ad task. Translucent arrows move counterclockwise around the conveyor above six carriers.
 
-The truck and cargo sprites in `src/assets/truck-atlas.png` are rendered from the supplied `1.8kV2.fbx` truck and `Cube.fbx` models.
+The truck sprite is in `src/assets/truck-body.png`. The original cargo art is stored as individual PNGs in `src/assets/blocks/`. The game packs these files into one texture at startup.
 
 ## Local development
 
@@ -34,4 +34,4 @@ Edit `.env` to configure the opening load and the hand.
 - `VITE_HAND_MODE=mouse` replaces the mouse cursor with the hand inside the playable for recording.
 - `VITE_HAND_MODE=disabled` keeps the regular cursor and hides the tutorial hand.
 
-Restart `npm run dev` after editing `.env`. Run `npm run build` again to include your settings in the production build.
+Restart `npm run dev` after editing `.env`. Rebuild to include your settings in the production or AppLovin build.

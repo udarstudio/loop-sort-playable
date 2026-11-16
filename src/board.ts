@@ -2,16 +2,18 @@ import { Container, Graphics, Sprite } from 'pixi.js';
 import type { createConveyorCargo } from './conveyor-cargo';
 import { conveyorEntryDistance } from './conveyor-path';
 import { pieceFlightDuration, piecesPerBlock, preparePieceToStack, stackPiece, type Piece } from './conveyor-pieces';
-import { createFactory } from './factory';
 import { openingDriveDuration, openingSettleDuration, openingStagger } from './opening';
 import { blockColors, type BlockColor, type TruckArt } from './truck-art';
 import { createTruckCover } from './truck-cover';
 import { createTruckHeadlights } from './truck-headlights';
-import { createTruckRoad } from './truck-roads';
-import { createYard } from './yard';
 
 export const boardWidth = 360;
 export const boardHeight = 656;
+const conveyorOpening = { x: 60, y: 74, width: 240, height: 178, radius: 17 };
+export const conveyorCenter = {
+  x: conveyorOpening.x + conveyorOpening.width / 2,
+  y: conveyorOpening.y + conveyorOpening.height / 2,
+};
 
 const truckCapacity = 16;
 const truckTop = 302;
@@ -81,12 +83,18 @@ function createTruckLoads(easyStart: boolean): BlockColor[][] {
 }
 
 function createConveyor(): Graphics {
-  return new Graphics()
-    .roundRect(22, 43, 316, 248, 54).fill(0x14112f)
-    .roundRect(24, 38, 312, 250, 53).fill(0x64509b)
-    .roundRect(27, 40, 306, 245, 50).fill(0x382b58)
-    .roundRect(57, 71, 246, 184, 20).fill(0x7561af)
-    .roundRect(60, 74, 240, 178, 17).fill(0x181436);
+  const conveyor = new Graphics();
+  const opening = conveyorOpening;
+  for (const [x, y, width, height, radius, color] of [
+    [22, 43, 316, 248, 54, 0x14112f],
+    [24, 38, 312, 250, 53, 0x64509b],
+    [27, 40, 306, 245, 50, 0x382b58],
+    [57, 71, 246, 184, 20, 0x7561af],
+  ]) {
+    conveyor.roundRect(x, y, width, height, radius).fill(color)
+      .roundRect(opening.x, opening.y, opening.width, opening.height, opening.radius).cut();
+  }
+  return conveyor;
 }
 
 type ConveyorInput = Pick<ReturnType<typeof createConveyorCargo>, 'addBlocks' | 'addPieces' | 'availablePieces' | 'isUnloading'>;
@@ -104,7 +112,7 @@ type PartialBlock = {
 };
 
 function addTruck(
-  board: Container, x: number, blocks: readonly BlockColor[], art: TruckArt,
+  board: Container, left: number, blocks: readonly BlockColor[], art: TruckArt,
   conveyor: ConveyorInput, events: TruckEvents, arrival?: OpeningArrival,
 ) {
   const truck = board.addChild(new Container());
@@ -114,7 +122,7 @@ function addTruck(
   let unloadHopElapsed = unloadHopDuration;
 
   const body = new Sprite(art.body);
-  body.position.set(x - 2, truckTop);
+  body.position.set(left, truckTop);
   truck.addChild(body);
   const headlights = truck.addChild(createTruckHeadlights());
   headlights.position.copyFrom(body.position);
@@ -124,7 +132,7 @@ function addTruck(
   truck.pivot.set(centerX, centerY);
   truck.position.set(centerX, centerY + (arrival?.distance ?? 0));
 
-  const cargoX = x + 6;
+  const cargoX = left + 8;
   const cargoHeight = 271;
   const blockHeight = cargoHeight / truckCapacity;
   const cargoBottom = truckTop + 2 + cargoHeight;
@@ -307,21 +315,10 @@ export function createBoard(
   { entranceY, opening, easyStart }: { entranceY: number; opening: boolean; easyStart: boolean },
 ) {
   const board = new Container();
-  const factory = createFactory(boardWidth / 2, 161);
   const loads = createTruckLoads(easyStart);
-  const truckSpacing = 48;
-  const firstTruckX = 40;
-  const firstTruckCenter = firstTruckX - 2 + art.body.width / 2;
-  const laneDividers = loads.slice(1).map((_, index) => firstTruckCenter + (index + 0.5) * truckSpacing);
-  const roadMargin = 28;
-  const road = createTruckRoad(roadMargin, boardWidth - roadMargin, truckTop - 38, laneDividers);
-  board.addChild(createYard(), road.view, createConveyor(), factory.view);
-
-  function resizeRoad(viewportBottom: number): void {
-    // Leave room for the opening camera shake near the bottom edge.
-    road.resize(viewportBottom + 16);
-  }
-  resizeRoad(entranceY);
+  const belt = board.addChild(createConveyor());
+  const { minX: firstTruckLeft, width: beltWidth } = belt.getLocalBounds();
+  const truckSpacing = (beltWidth - art.body.width) / (loads.length - 1);
 
   const middleLane = (loads.length - 1) / 2;
   const openingOrder = loads.map((_, lane) => lane)
@@ -330,14 +327,12 @@ export function createBoard(
     const arrival = opening
       ? { distance: entranceY - truckTop, delay: openingOrder.indexOf(lane) * openingStagger }
       : undefined;
-    return addTruck(board, firstTruckX + lane * truckSpacing, blocks, art, conveyor, events, arrival);
+    return addTruck(board, firstTruckLeft + lane * truckSpacing, blocks, art, conveyor, events, arrival);
   });
 
   return {
     view: board,
     receivers: trucks,
-    advanceFactory: factory.advance,
-    resizeRoad,
     advance(deltaMS: number) {
       let pieceLanded = false;
       for (const truck of trucks) {

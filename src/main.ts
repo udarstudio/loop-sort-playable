@@ -4,7 +4,7 @@ import { Application, Container } from 'pixi.js';
 import musicUrl from './assets/casual-music-loop-18.mp3';
 import piecePopUrl from './assets/pop-2.mp3';
 import truckCompleteUrl from './assets/sfx-powerup-bright-1.mp3';
-import { boardHeight, boardWidth, createBoard } from './board';
+import { boardHeight, boardWidth, conveyorCenter, createBoard } from './board';
 import { createConveyorFlow } from './conveyor-arrows';
 import { conveyorCapacity, createConveyorCargo } from './conveyor-cargo';
 import { addMouseHand, addTutorialHand } from './hand';
@@ -114,6 +114,8 @@ async function startPlayable(mount: HTMLElement): Promise<void> {
 
   const capacity = document.createElement('output');
   capacity.className = 'conveyor-capacity';
+  capacity.style.left = `${conveyorCenter.x / boardWidth * 100}%`;
+  capacity.style.top = `${conveyorCenter.y / boardHeight * 100}%`;
   capacity.setAttribute('aria-label', 'Conveyor capacity in blocks');
   const showCapacity = (count: number) => {
     capacity.value = `${count} / ${conveyorCapacity}`;
@@ -155,7 +157,6 @@ async function startPlayable(mount: HTMLElement): Promise<void> {
     scene.advance(deltaMS);
     const distance = cargo.advance(deltaMS, scene.receivers);
     flow.advance(distance);
-    scene.advanceFactory(distance);
     confetti?.advance(deltaMS);
     if (advanceOpening) {
       if (!advanceOpening(deltaMS)) {
@@ -176,7 +177,6 @@ async function startPlayable(mount: HTMLElement): Promise<void> {
     }
     boardFrame.position.set(layout.x, layout.y);
     boardFrame.scale.set(layout.scale);
-    scene.resizeRoad(layout.viewportBottom);
     renderedLayout = layout;
   }
 

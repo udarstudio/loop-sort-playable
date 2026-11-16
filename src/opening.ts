@@ -28,6 +28,7 @@ export function startOpening(world: Container, capacity: HTMLOutputElement, widt
 
     world.scale.set(1 + 0.6 * (1 - pullback));
     world.position.set(focusX, focusY - 50 * (1 - pullback) + shakeY);
+    capacity.style.translate = `0 ${shakeY / width * 100}cqw`;
     capacity.style.opacity = String(Math.min(1, Math.max(0, (elapsed - lastImpact) / openingSettleDuration)));
   }
 
@@ -43,6 +44,7 @@ export function startOpening(world: Container, capacity: HTMLOutputElement, widt
     world.position.set(0);
     world.pivot.set(0);
     world.eventMode = 'passive';
+    capacity.style.removeProperty('translate');
     capacity.style.removeProperty('opacity');
     return false;
   };
