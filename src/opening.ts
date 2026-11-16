@@ -4,7 +4,7 @@ export const openingDriveDuration = 610;
 export const openingStagger = 54;
 export const openingSettleDuration = 145;
 
-export function startOpening(world: Container, board: HTMLElement, capacity: HTMLOutputElement, width: number, truckCount: number) {
+export function startOpening(world: Container, capacity: HTMLOutputElement, width: number, truckCount: number) {
   const lastImpact = openingDriveDuration + (truckCount - 1) * openingStagger;
   const duration = lastImpact + openingSettleDuration;
   const focusX = width / 2;
@@ -13,7 +13,6 @@ export function startOpening(world: Container, board: HTMLElement, capacity: HTM
 
   world.eventMode = 'none';
   world.pivot.set(focusX, focusY);
-  board.classList.add('is-opening');
 
   function updateCamera(): void {
     const progress = Math.min(1, elapsed / lastImpact);
@@ -44,7 +43,6 @@ export function startOpening(world: Container, board: HTMLElement, capacity: HTM
     world.position.set(0);
     world.pivot.set(0);
     world.eventMode = 'passive';
-    board.classList.remove('is-opening');
     capacity.style.removeProperty('opacity');
     return false;
   };

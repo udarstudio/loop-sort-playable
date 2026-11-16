@@ -10,11 +10,13 @@ import { conveyorCapacity, createConveyorCargo } from './conveyor-cargo';
 import { addMouseHand, addTutorialHand } from './hand';
 import { startOpening } from './opening';
 import { loadTruckArt } from './truck-art';
+import { createTruckConfetti } from './truck-confetti';
 import './style.css';
 
 const maxRenderScale = 4;
+const maxRenderPixels = 3_000_000;
 
-function addBackgroundMusic(board: HTMLElement): void {
+function addBackgroundMusic(canvas: HTMLCanvasElement): void {
   const music = new Audio();
   music.preload = 'none';
   music.loop = true;
@@ -22,10 +24,10 @@ function addBackgroundMusic(board: HTMLElement): void {
   music.src = musicUrl;
 
   function startMusic(): void {
-    void music.play().then(() => board.removeEventListener('click', startMusic), () => {});
+    void music.play().then(() => canvas.removeEventListener('click', startMusic), () => {});
   }
 
-  board.addEventListener('click', startMusic);
+  canvas.addEventListener('click', startMusic);
 }
 
 function createTruckSounds() {
@@ -82,21 +84,26 @@ async function startPlayable(mount: HTMLElement): Promise<void> {
   mount.style.setProperty('--board-aspect', String(boardWidth / boardHeight));
   mount.appendChild(board);
 
-  function getRenderSize() {
-    const { width, top } = board.getBoundingClientRect();
-    const pixelRatio = Math.min(window.devicePixelRatio, 3);
-    const resolution = Math.min(maxRenderScale, Math.max(1, width * pixelRatio / boardWidth));
-    const visibleHeight = mount.getBoundingClientRect().bottom - top;
-    const height = Math.max(boardHeight, Math.ceil(visibleHeight * boardWidth / (width || boardWidth)));
-    return { height, resolution };
+  function getLayout() {
+    const viewport = mount.getBoundingClientRect();
+    const bounds = board.getBoundingClientRect();
+    const width = Math.max(1, Math.round(viewport.width));
+    const height = Math.max(1, Math.round(viewport.height));
+    const scale = bounds.width / boardWidth || 1;
+    const x = bounds.left - viewport.left;
+    const y = bounds.top - viewport.top;
+    const viewportBottom = Math.max(boardHeight, Math.ceil((height - y) / scale));
+    const resolution = Math.min(window.devicePixelRatio, 3, maxRenderScale / scale, Math.sqrt(maxRenderPixels / (width * height)));
+    return { width, height, resolution, scale, x, y, viewportBottom };
   }
 
-  const initialSize = getRenderSize();
+  const initialLayout = getLayout();
   const [truckArt] = await Promise.all([
     loadTruckArt(),
     app.init({
-      width: boardWidth,
-      ...initialSize,
+      width: initialLayout.width,
+      height: initialLayout.height,
+      resolution: initialLayout.resolution,
       backgroundAlpha: 0,
       antialias: true,
       autoStart: false,
@@ -116,11 +123,20 @@ async function startPlayable(mount: HTMLElement): Promise<void> {
   const flow = createConveyorFlow();
   const sounds = createTruckSounds();
   const cargo = createConveyorCargo(showCapacity, sounds.onPieceDeparture);
-  const opening = !window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+  const animate = !window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+  const confetti = animate ? createTruckConfetti() : undefined;
   const easyStart = import.meta.env.VITE_EASY_START === 'true';
-  const scene = createBoard(truckArt, cargo, sounds, { entranceY: getRenderSize().height, opening, easyStart });
-  board.append(app.canvas, capacity);
-  addBackgroundMusic(board);
+  const scene = createBoard(truckArt, cargo, {
+    ...sounds,
+    onComplete(x, y) {
+      sounds.onComplete();
+      confetti?.burst(x, y);
+    },
+  }, { entranceY: getLayout().viewportBottom, opening: animate, easyStart });
+  app.canvas.className = 'playable-canvas';
+  mount.prepend(app.canvas);
+  board.appendChild(capacity);
+  addBackgroundMusic(app.canvas);
 
   const handMode = import.meta.env.VITE_HAND_MODE;
   const showTutorialHand = () => handMode === 'tutorial'
@@ -128,16 +144,19 @@ async function startPlayable(mount: HTMLElement): Promise<void> {
     : undefined;
   if (handMode === 'mouse') addMouseHand(mount);
 
-  const world = app.stage.addChild(new Container());
+  const boardFrame = app.stage.addChild(new Container());
+  const world = boardFrame.addChild(new Container());
   world.addChild(scene.view, flow.view, cargo.view);
-  let advanceOpening = opening ? startOpening(world, board, capacity, boardWidth, scene.receivers.length) : undefined;
-  let updateHand = opening ? undefined : showTutorialHand();
+  if (confetti) world.addChild(confetti.view);
+  let advanceOpening = animate ? startOpening(world, capacity, boardWidth, scene.receivers.length) : undefined;
+  let updateHand = animate ? undefined : showTutorialHand();
 
   app.ticker.add(({ deltaMS }) => {
     scene.advance(deltaMS);
     const distance = cargo.advance(deltaMS, scene.receivers);
     flow.advance(distance);
     scene.advanceFactory(distance);
+    confetti?.advance(deltaMS);
     if (advanceOpening) {
       if (!advanceOpening(deltaMS)) {
         advanceOpening = undefined;
@@ -148,16 +167,22 @@ async function startPlayable(mount: HTMLElement): Promise<void> {
     }
   });
 
-  let renderedSize = initialSize;
+  let renderedLayout = initialLayout;
   function resizeCanvas(): void {
-    const size = getRenderSize();
-    if (size.height !== renderedSize.height || size.resolution !== renderedSize.resolution) {
-      app.renderer.resize(boardWidth, size.height, size.resolution);
-      renderedSize = size;
+    const layout = getLayout();
+    if (layout.width !== renderedLayout.width || layout.height !== renderedLayout.height
+        || layout.resolution !== renderedLayout.resolution) {
+      app.renderer.resize(layout.width, layout.height, layout.resolution);
     }
+    boardFrame.position.set(layout.x, layout.y);
+    boardFrame.scale.set(layout.scale);
+    scene.resizeRoad(layout.viewportBottom);
+    renderedLayout = layout;
   }
 
-  new ResizeObserver(resizeCanvas).observe(board);
+  const resizeObserver = new ResizeObserver(resizeCanvas);
+  resizeObserver.observe(mount);
+  resizeObserver.observe(board);
   window.addEventListener('resize', resizeCanvas);
   resizeCanvas();
   app.render();

@@ -93,7 +93,7 @@ type ConveyorInput = Pick<ReturnType<typeof createConveyorCargo>, 'addBlocks' | 
 type TruckEvents = {
   onUnload(): void;
   onPieceLanded(): void;
-  onComplete(): void;
+  onComplete(x: number, y: number): void;
 };
 
 type PartialBlock = {
@@ -283,7 +283,7 @@ function addTruck(
       cargo.unshift(truck.addChild(block.sprite));
       if (isComplete()) {
         completeTruck(true);
-        events.onComplete();
+        events.onComplete(truck.x, truck.y);
       }
     }
     return pieceLanded;
@@ -313,12 +313,14 @@ export function createBoard(
   const firstTruckCenter = firstTruckX - 2 + art.body.width / 2;
   const laneDividers = loads.slice(1).map((_, index) => firstTruckCenter + (index + 0.5) * truckSpacing);
   const roadMargin = 28;
-  const roadBottom = opening ? entranceY + 8 : boardHeight;
-  board.addChild(
-    createTruckRoad(roadMargin, boardWidth - roadMargin, truckTop - 38, roadBottom, laneDividers),
-    createConveyor(),
-    factory.view,
-  );
+  const road = createTruckRoad(roadMargin, boardWidth - roadMargin, truckTop - 38, laneDividers);
+  board.addChild(road.view, createConveyor(), factory.view);
+
+  function resizeRoad(viewportBottom: number): void {
+    // Leave room for the opening camera shake near the bottom edge.
+    road.resize(viewportBottom + 16);
+  }
+  resizeRoad(entranceY);
 
   const middleLane = (loads.length - 1) / 2;
   const openingOrder = loads.map((_, lane) => lane)
@@ -334,6 +336,7 @@ export function createBoard(
     view: board,
     receivers: trucks,
     advanceFactory: factory.advance,
+    resizeRoad,
     advance(deltaMS: number) {
       let pieceLanded = false;
       for (const truck of trucks) {
