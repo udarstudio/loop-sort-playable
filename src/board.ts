@@ -8,6 +8,7 @@ import { blockColors, type BlockColor, type TruckArt } from './truck-art';
 import { createTruckCover } from './truck-cover';
 import { createTruckHeadlights } from './truck-headlights';
 import { createTruckRoad } from './truck-roads';
+import { createYard } from './yard';
 
 export const boardWidth = 360;
 export const boardHeight = 656;
@@ -314,7 +315,7 @@ export function createBoard(
   const laneDividers = loads.slice(1).map((_, index) => firstTruckCenter + (index + 0.5) * truckSpacing);
   const roadMargin = 28;
   const road = createTruckRoad(roadMargin, boardWidth - roadMargin, truckTop - 38, laneDividers);
-  board.addChild(road.view, createConveyor(), factory.view);
+  board.addChild(createYard(), road.view, createConveyor(), factory.view);
 
   function resizeRoad(viewportBottom: number): void {
     // Leave room for the opening camera shake near the bottom edge.
