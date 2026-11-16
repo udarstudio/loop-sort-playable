@@ -1,6 +1,6 @@
 import { Rectangle, Sprite, Texture } from 'pixi.js';
 import { loopLength, positionOnConveyor } from './conveyor-path';
-import { getLoosePieceTexture } from './truck-art';
+import { getBaseBlockTexture, getLoosePieceTexture } from './truck-art';
 
 const columns = 4;
 const rows = 4;
@@ -45,7 +45,8 @@ function getBlockTiles(texture: Texture): Texture[] {
         tileHeight,
       ),
     }));
-    for (const tile of tiles) tileBlocks.set(tile, texture);
+    const block = getBaseBlockTexture(texture);
+    for (const tile of tiles) tileBlocks.set(tile, block);
     blockTiles.set(texture, tiles);
   }
   return tiles;

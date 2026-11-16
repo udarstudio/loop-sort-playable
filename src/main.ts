@@ -1,6 +1,6 @@
 import 'pixi.js/graphics';
 import 'pixi.js/events';
-import { Application, Container } from 'pixi.js';
+import { Application, Container, FillGradient, Graphics } from 'pixi.js';
 import musicUrl from './assets/casual-music-loop-18.mp3';
 import piecePopUrl from './assets/pop-2.mp3';
 import truckCompleteUrl from './assets/sfx-powerup-bright-1.mp3';
@@ -15,6 +15,7 @@ import './style.css';
 
 const maxRenderScale = 4;
 const maxRenderPixels = 3_000_000;
+const backgroundEdge = '#aa9bcb';
 
 function addBackgroundMusic(canvas: HTMLCanvasElement): void {
   const music = new Audio();
@@ -104,7 +105,7 @@ async function startPlayable(mount: HTMLElement): Promise<void> {
       width: initialLayout.width,
       height: initialLayout.height,
       resolution: initialLayout.resolution,
-      backgroundAlpha: 0,
+      background: backgroundEdge,
       antialias: true,
       autoStart: false,
       preference: ['webgl', 'canvas'],
@@ -148,7 +149,17 @@ async function startPlayable(mount: HTMLElement): Promise<void> {
 
   const boardFrame = app.stage.addChild(new Container());
   const world = boardFrame.addChild(new Container());
-  world.addChild(scene.view, flow.view, cargo.view);
+  const background = new Graphics().rect(-1, -1, 2, 2).fill(new FillGradient({
+    type: 'radial',
+    colorStops: [
+      { offset: 0, color: '#e1d8f4' },
+      { offset: 0.52, color: '#c7bee4' },
+      { offset: 1, color: backgroundEdge },
+    ],
+  }));
+  background.position.copyFrom(conveyorCenter);
+  background.eventMode = 'none';
+  world.addChild(background, scene.view, flow.view, cargo.view);
   if (confetti) world.addChild(confetti.view);
   let advanceOpening = animate ? startOpening(world, capacity, boardWidth, scene.receivers.length) : undefined;
   let updateHand = animate ? undefined : showTutorialHand();
@@ -177,6 +188,13 @@ async function startPlayable(mount: HTMLElement): Promise<void> {
     }
     boardFrame.position.set(layout.x, layout.y);
     boardFrame.scale.set(layout.scale);
+    const centerX = layout.x + conveyorCenter.x * layout.scale;
+    const centerY = layout.y + conveyorCenter.y * layout.scale;
+    const radius = Math.hypot(
+      Math.max(centerX, layout.width - centerX),
+      Math.max(centerY, layout.height - centerY),
+    );
+    background.scale.set(radius / layout.scale);
     renderedLayout = layout;
   }
 

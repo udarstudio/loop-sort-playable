@@ -3,7 +3,9 @@ import type { createConveyorCargo } from './conveyor-cargo';
 import { conveyorEntryDistance } from './conveyor-path';
 import { pieceFlightDuration, piecesPerBlock, preparePieceToStack, stackPiece, type Piece } from './conveyor-pieces';
 import { openingDriveDuration, openingSettleDuration, openingStagger } from './opening';
-import { blockColors, type BlockColor, type TruckArt } from './truck-art';
+import {
+  blockColors, createCargoRun, getBaseBlockTexture, getStackedBlockTexture, type BlockColor, type TruckArt,
+} from './truck-art';
 import { createTruckCover } from './truck-cover';
 import { createTruckHeadlights } from './truck-headlights';
 
@@ -138,16 +140,35 @@ function addTruck(
   const cargoBottom = truckTop + 2 + cargoHeight;
   const firstBlockY = cargoBottom - blocks.length * blockHeight;
   const distance = conveyorEntryDistance(centerX);
+  const cargoView = truck.addChild(new Container());
   const loading: PartialBlock[] = [];
   const cargo = blocks.map((color, index) => {
     const block = new Sprite(art.blocks[color]);
     block.height = blockHeight;
     block.position.set(cargoX, firstBlockY + index * blockHeight);
-    return truck.addChild(block);
+    return block;
   });
 
+  function updateCargoAppearance(): void {
+    for (const run of cargoView.removeChildren()) run.destroy();
+    const textures = cargo.map((block) => getBaseBlockTexture(block.texture));
+    for (let start = 0; start < cargo.length;) {
+      const texture = textures[start];
+      let end = start + 1;
+      while (end < cargo.length && textures[end] === texture) end++;
+      for (let index = start; index < end; index++) {
+        cargo[index].texture = getStackedBlockTexture(texture, index > start, index + 1 < end);
+      }
+      cargoView.addChild(createCargoRun(cargo[start], end - start));
+      start = end;
+    }
+  }
+  updateCargoAppearance();
+
   function isComplete(): boolean {
-    return cargo.length === truckCapacity && cargo.every((block) => block.texture === cargo[0].texture);
+    if (cargo.length !== truckCapacity) return false;
+    const first = getBaseBlockTexture(cargo[0].texture);
+    return cargo.every((block) => getBaseBlockTexture(block.texture) === first);
   }
 
   let cover: ReturnType<typeof createTruckCover> | undefined;
@@ -155,7 +176,7 @@ function addTruck(
   function completeTruck(animate: boolean): void {
     body.eventMode = 'none';
     body.cursor = 'default';
-    const texture = cargo[0].texture;
+    const texture = getBaseBlockTexture(cargo[0].texture);
     const color = blockColors.find((color) => art.blocks[color] === texture);
     if (!color) return;
     cover = createTruckCover(color, cargo[0].width, cargoHeight, animate);
@@ -206,10 +227,12 @@ function addTruck(
     if (!first) return movedPieces > 0;
 
     let runLength = 1;
-    while (runLength < cargo.length && cargo[runLength].texture === first.texture) runLength++;
+    const texture = getBaseBlockTexture(first.texture);
+    while (runLength < cargo.length && getBaseBlockTexture(cargo[runLength].texture) === texture) runLength++;
 
     const moved = conveyor.addBlocks(cargo.slice(0, runLength), distance, sourceOffsetY);
     cargo.splice(0, moved);
+    if (moved > 0) updateCargoAppearance();
     return movedPieces > 0 || moved > 0;
   }
 
@@ -217,12 +240,12 @@ function addTruck(
     if (body.eventMode !== 'static' || conveyor.isUnloading(distance)) return false;
     const texture = piece.blockTexture;
     let block = loading.at(-1);
-    const topColor = (block?.sprite ?? cargo[0])?.texture;
-    if (topColor && topColor !== texture) return false;
+    const top = block?.sprite ?? cargo[0];
+    if (top && getBaseBlockTexture(top.texture) !== texture) return false;
 
     if (!block || block.pieces.length === piecesPerBlock) {
       if (cargo.length + loading.length >= truckCapacity) return false;
-      const sprite = new Sprite(texture);
+      const sprite = new Sprite(getStackedBlockTexture(texture, false, Boolean(top)));
       sprite.height = blockHeight;
       sprite.position.set(cargoX, cargoBottom - (cargo.length + loading.length + 1) * blockHeight);
       block = { sprite, pieces: [], landed: 0 };
@@ -289,7 +312,8 @@ function addTruck(
     while (loading[0]?.landed === piecesPerBlock) {
       const block = loading.shift()!;
       for (const { piece } of block.pieces) piece.sprite.destroy();
-      cargo.unshift(truck.addChild(block.sprite));
+      cargo.unshift(block.sprite);
+      updateCargoAppearance();
       if (isComplete()) {
         completeTruck(true);
         events.onComplete(truck.x, truck.y);
