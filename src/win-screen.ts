@@ -28,7 +28,8 @@ export async function createWinScreen(animate: boolean) {
     backdrop.setSize(width, height);
     confetti?.resize(width, height);
     logo.position.set(width / 2, height * 0.39);
-    logo.scale.set(Math.min(width * 0.78, height * 0.77, 520) / logoData.width);
+    const logoWidth = Math.min(width * 0.78, height * 0.77, 520) * 0.9;
+    logo.scale.set(logoWidth / logoData.width);
   }
 
   function advance(deltaMS: number, playSound: () => void): boolean {

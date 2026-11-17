@@ -1,7 +1,10 @@
 import { CanvasSource, NineSliceSprite, Rectangle, Sprite, Texture } from 'pixi.js';
+import blueBlockUrl from './assets/blocks/blue.png';
 import orangeBlockUrl from './assets/blocks/orange.png';
 import pinkBlockUrl from './assets/blocks/pink.png';
+import roseBlockUrl from './assets/blocks/rose.png';
 import whiteBlockUrl from './assets/blocks/white.png';
+import yellowBlockUrl from './assets/blocks/yellow.png';
 import truckBodyUrl from './assets/truck-body.png';
 
 export const blockColors = ['pink', 'orange', 'white'] as const;
@@ -15,7 +18,10 @@ export type TruckArt = {
 export const blockHeight = 15;
 const loosePieceCornerRatio = 0.4;
 const blockWidth = 28;
-const blockUrls = { pink: pinkBlockUrl, orange: orangeBlockUrl, white: whiteBlockUrl };
+// Both variants use the same color IDs for the puzzle layout.
+const blockUrls = import.meta.env.VITE_PLAYABLE_VARIANT === 'alternative'
+  ? { pink: roseBlockUrl, orange: yellowBlockUrl, white: blueBlockUrl }
+  : { pink: pinkBlockUrl, orange: orangeBlockUrl, white: whiteBlockUrl };
 const blockX = 46;
 const blockY = { pink: 0, orange: 17, white: 34 } as const;
 const blockTopHeight = 5;

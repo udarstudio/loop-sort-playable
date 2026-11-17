@@ -1,7 +1,8 @@
 import 'pixi.js/graphics';
 import 'pixi.js/events';
 import { Application, Container, FillGradient, Graphics } from 'pixi.js';
-import musicUrl from './assets/casual-music-loop-18.mp3';
+import alternativeMusicUrl from './assets/casual-music-loop-01.mp3';
+import classicMusicUrl from './assets/casual-music-loop-18.mp3';
 import piecePopUrl from './assets/pop-2.mp3';
 import truckCompleteUrl from './assets/sfx-powerup-bright-1.mp3';
 import winSoundUrl from './assets/win-1.mp3';
@@ -12,12 +13,12 @@ import { addMouseHand, addTutorialHand } from './hand';
 import { loadTruckArt } from './truck-art';
 import { createTruckConfetti } from './truck-confetti';
 import { createWinScreen } from './win-screen';
-import './style.css';
 
 const maxRenderScale = 4;
 const maxRenderPixels = 3_000_000;
 const backgroundEdge = '#aa9bcb';
 const winHoldDuration = 1000;
+const musicUrl = import.meta.env.VITE_PLAYABLE_VARIANT === 'alternative' ? alternativeMusicUrl : classicMusicUrl;
 
 function addBackgroundMusic(canvas: HTMLCanvasElement): () => void {
   const music = new Audio();
@@ -142,18 +143,15 @@ async function startPlayable(mount: HTMLElement): Promise<void> {
   const cargo = createConveyorCargo(showCapacity, sounds.onPieceDeparture);
   const confetti = animate ? createTruckConfetti() : undefined;
   const easyStart = import.meta.env.VITE_EASY_START === 'true';
-  const winAfterFirstTruck = import.meta.env.VITE_WIN_AFTER_FIRST_TRUCK === 'true';
   let winHoldRemaining = 0;
   const scene = createBoard(truckArt, cargo, {
     ...sounds,
     onComplete(x, y) {
       sounds.onComplete();
       confetti?.burst(x, y);
-      if (winAfterFirstTruck || scene.receivers.every((truck) => truck.isComplete())) {
-        if (winHoldRemaining > 0) return;
-        winHoldRemaining = winHoldDuration;
-        boardFrame.eventMode = 'none';
-      }
+      if (winHoldRemaining > 0 || !scene.receivers.every((truck) => truck.isComplete())) return;
+      winHoldRemaining = winHoldDuration;
+      boardFrame.eventMode = 'none';
     },
   }, { easyStart });
   app.canvas.className = 'playable-canvas';

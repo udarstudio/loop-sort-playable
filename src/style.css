@@ -18,6 +18,9 @@ body {
 }
 
 main {
+  /* Reserve the board and logo space before the game initializes. */
+  --board-aspect: calc(360 / 656);
+  --conveyor-top-ratio: calc(38 / 360);
   --viewport-height: 100vh;
   --safe-inset: max(12px, env(safe-area-inset-top), env(safe-area-inset-bottom));
   --logo-width: clamp(112px, 34vw, 168px);
@@ -53,7 +56,8 @@ main {
   left: 50%;
   translate: -50% 0;
   width: var(--logo-width);
-  height: auto;
+  height: var(--logo-height);
+  object-fit: contain;
   pointer-events: none;
 }
 
@@ -74,7 +78,7 @@ main {
   opacity: 1;
   font-family: inherit;
   font-weight: inherit;
-  font-size: clamp(25px, 4.3vw, 34px);
+  font-size: clamp(28px, 4.8vw, 38px);
   line-height: 1;
   -webkit-text-stroke: 3px #123303;
   paint-order: stroke fill;
@@ -135,7 +139,7 @@ main {
 .playable-won .download-cta {
   left: 50%;
   right: auto;
-  bottom: max(12%, env(safe-area-inset-bottom));
+  bottom: max(18%, env(safe-area-inset-bottom));
   translate: -50% 0;
   width: min(64vw, 260px, max(145px, 38vh));
   height: auto;
