@@ -67,18 +67,20 @@ function createTruckSounds() {
   }
 
   const pop = loadSound(piecePopUrl);
+  const playPop = (rate: number, output: AudioNode) =>
+    pop(rate * (0.92 + Math.random() * 0.16), output);
   const powerUp = loadSound(truckCompleteUrl);
   const win = loadSound(winSoundUrl);
   return {
     onUnload() {
-      if (audio.state === 'running') void pop(1, unloadVolume);
-      else void audio.resume().then(() => pop(1, unloadVolume), () => {});
+      if (audio.state === 'running') void playPop(1, unloadVolume);
+      else void audio.resume().then(() => playPop(1, unloadVolume), () => {});
     },
     onPieceDeparture() {
-      void pop(3, pieceVolume);
+      void playPop(3, pieceVolume);
     },
     onPieceLanded() {
-      void pop(3.5, pieceVolume);
+      void playPop(3.5, pieceVolume);
     },
     onComplete() {
       void powerUp();
