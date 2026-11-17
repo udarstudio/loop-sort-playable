@@ -25,12 +25,10 @@ Open `dist/applovin/index.html` to test the standalone playable. The build embed
 
 ## Playable options
 
-All six trucks arrive during the opening camera pullback. When reduced motion is enabled, the trucks start parked.
-
-Edit `.env` to configure the opening load, the hand, and the success-screen trigger.
+Edit `.env` to configure the starting loads, the hand, and the success-screen trigger.
 
 - `VITE_EASY_START=true` places the six preset loads in random lanes. The easiest truck has one off-color block on top, and its missing match is on top of a five-layer truck. The matched blocks and the layers travel with their trucks when the lanes are shuffled. Set this to `false` to shuffle the individual blocks instead.
-- `VITE_HAND_MODE=tutorial` shows a hand pointing to a random truck after the opening. After three seconds without input, it returns to that lane when the truck can unload, even with one block left. The tutorial ends for that run once the truck is empty or full of one color.
+- `VITE_HAND_MODE=tutorial` shows a hand pointing to a random truck as soon as the board appears. After three seconds without input, it returns to that lane when the truck can unload, even with one block left. The tutorial ends for that run once the truck is empty or full of one color.
 - `VITE_HAND_MODE=mouse` replaces the mouse cursor with the hand inside the playable for recording.
 - `VITE_HAND_MODE=disabled` keeps the regular cursor and hides the tutorial hand.
 - `VITE_WIN_AFTER_FIRST_TRUCK=true` previews the success screen after the first completed truck. Set this to `false` to show it after all six trucks are complete.

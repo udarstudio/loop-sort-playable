@@ -15,7 +15,7 @@ import {
 export const conveyorCapacity = 16;
 
 const pieceCapacity = conveyorCapacity * piecesPerBlock;
-const pieceDepartureInterval = 36;
+const pieceDepartureInterval = 43;
 const launchSpacing = 13;
 const loadingReach = 6;
 

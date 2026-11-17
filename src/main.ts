@@ -9,7 +9,6 @@ import { boardHeight, boardWidth, conveyorCenter, conveyorTop, createBoard } fro
 import { createConveyorFlow } from './conveyor-arrows';
 import { conveyorCapacity, createConveyorCargo } from './conveyor-cargo';
 import { addMouseHand, addTutorialHand } from './hand';
-import { startOpening } from './opening';
 import { loadTruckArt } from './truck-art';
 import { createTruckConfetti } from './truck-confetti';
 import { createWinScreen } from './win-screen';
@@ -107,9 +106,8 @@ async function startPlayable(mount: HTMLElement): Promise<void> {
     const scale = bounds.width / boardWidth || 1;
     const x = bounds.left - viewport.left;
     const y = bounds.top - viewport.top;
-    const viewportBottom = Math.max(boardHeight, Math.ceil((height - y) / scale));
     const resolution = Math.min(window.devicePixelRatio, 3, maxRenderScale / scale, Math.sqrt(maxRenderPixels / (width * height)));
-    return { width, height, resolution, scale, x, y, viewportBottom };
+    return { width, height, resolution, scale, x, y };
   }
 
   const initialLayout = getLayout();
@@ -154,24 +152,23 @@ async function startPlayable(mount: HTMLElement): Promise<void> {
       if (winAfterFirstTruck || scene.receivers.every((truck) => truck.isComplete())) {
         if (winHoldRemaining > 0) return;
         winHoldRemaining = winHoldDuration;
-        world.eventMode = 'none';
+        boardFrame.eventMode = 'none';
       }
     },
-  }, { entranceY: getLayout().viewportBottom, opening: animate, easyStart });
+  }, { easyStart });
   app.canvas.className = 'playable-canvas';
   mount.prepend(app.canvas);
   board.appendChild(capacity);
   const stopBackgroundMusic = addBackgroundMusic(app.canvas);
 
   const handMode = import.meta.env.VITE_HAND_MODE;
-  const showTutorialHand = () => handMode === 'tutorial'
+  const updateHand = handMode === 'tutorial'
     ? addTutorialHand(board, scene.receivers, boardWidth, boardHeight)
     : undefined;
   if (handMode === 'mouse') addMouseHand(mount);
 
   const boardFrame = app.stage.addChild(new Container());
   app.stage.addChild(winScreen.view);
-  const world = boardFrame.addChild(new Container());
   const background = new Graphics().rect(-1, -1, 2, 2).fill(new FillGradient({
     type: 'radial',
     colorStops: [
@@ -182,10 +179,8 @@ async function startPlayable(mount: HTMLElement): Promise<void> {
   }));
   background.position.copyFrom(conveyorCenter);
   background.eventMode = 'none';
-  world.addChild(background, scene.view, flow.view, cargo.view);
-  if (confetti) world.addChild(confetti.view);
-  let advanceOpening = animate ? startOpening(world, capacity, boardWidth, scene.receivers.length) : undefined;
-  let updateHand = animate ? undefined : showTutorialHand();
+  boardFrame.addChild(background, scene.view, flow.view, cargo.view);
+  if (confetti) boardFrame.addChild(confetti.view);
 
   function showWin(): void {
     winScreen.view.visible = true;
@@ -216,14 +211,7 @@ async function startPlayable(mount: HTMLElement): Promise<void> {
     const distance = cargo.advance(deltaMS, scene.receivers);
     flow.advance(distance);
     confetti?.advance(deltaMS);
-    if (advanceOpening) {
-      if (!advanceOpening(deltaMS)) {
-        advanceOpening = undefined;
-        updateHand = showTutorialHand();
-      }
-    } else {
-      updateHand?.();
-    }
+    updateHand?.();
   });
 
   let renderedLayout = initialLayout;

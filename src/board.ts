@@ -5,7 +5,6 @@ import {
   createStackFill, landingProgress, pieceFlightDuration, pieceLandingTime, piecesPerBlock, preparePieceToStack,
   stackPiece, type Piece,
 } from './conveyor-pieces';
-import { openingDriveDuration, openingSettleDuration, openingStagger } from './opening';
 import { blockColors, createCargoRun, type BlockColor, type TruckArt } from './truck-art';
 import { createTruckHeadlights } from './truck-headlights';
 
@@ -20,10 +19,8 @@ export const conveyorCenter = {
 
 const truckCapacity = 16;
 const truckTop = 302;
-const openingArrivalDuration = openingDriveDuration + openingSettleDuration;
 const unloadHopDuration = 180;
 const completionCheckColors = { pink: 0x7b1f53, orange: 0x834018, white: 0x635773 };
-type OpeningArrival = { distance: number; delay: number };
 
 function shuffle<T>(items: T[]): T[] {
   for (let index = items.length - 1; index > 0; index--) {
@@ -113,11 +110,9 @@ type PartialBlock = {
 
 function addTruck(
   board: Container, left: number, blocks: readonly BlockColor[], art: TruckArt,
-  conveyor: ConveyorInput, events: TruckEvents, arrival?: OpeningArrival,
+  conveyor: ConveyorInput, events: TruckEvents,
 ) {
   const truck = board.addChild(new Container());
-  truck.visible = !arrival;
-  let parkingElapsed = -(arrival?.delay ?? 0);
   let unloadHopElapsed = unloadHopDuration;
 
   const body = new Sprite(art.body);
@@ -127,7 +122,7 @@ function addTruck(
   const centerX = body.x + body.width / 2;
   const centerY = truckTop + body.height / 2;
   truck.pivot.set(centerX, centerY);
-  truck.position.set(centerX, centerY + (arrival?.distance ?? 0));
+  truck.position.set(centerX, centerY);
 
   const cargoX = left + 8;
   const cargoHeight = 271;
@@ -198,10 +193,9 @@ function addTruck(
       && !loading.some((block) => block.landed < block.pieces.length);
   }
 
-  const startsComplete = isComplete();
-  body.eventMode = arrival ? 'none' : 'static';
+  body.eventMode = 'static';
   body.cursor = 'pointer';
-  if (startsComplete) markComplete();
+  if (isComplete()) markComplete();
   body.on('pointertap', ({ button }) => {
     if (button !== 0 || !canUnload() || !unload()) return;
     unloadHopElapsed = 0;
@@ -260,19 +254,6 @@ function addTruck(
   }
 
   function advance(deltaMS: number): boolean {
-    if (arrival && parkingElapsed < openingArrivalDuration) {
-      parkingElapsed = Math.min(openingArrivalDuration, parkingElapsed + deltaMS);
-      if (parkingElapsed <= 0) return false;
-      truck.visible = true;
-      const drive = Math.min(1, parkingElapsed / openingDriveDuration);
-      const settle = Math.max(0, (parkingElapsed - openingDriveDuration) / openingSettleDuration);
-      const travel = drive * (0.85 + 0.15 * drive);
-      const rebound = -16 * Math.sin(2 * Math.PI * settle) * (1 - settle) ** 2;
-      truck.y = centerY + arrival.distance * (1 - travel) + rebound;
-      if (!startsComplete && parkingElapsed === openingArrivalDuration) body.eventMode = 'static';
-      return false;
-    }
-
     if (unloadHopElapsed < unloadHopDuration) {
       unloadHopElapsed = Math.min(unloadHopDuration, unloadHopElapsed + deltaMS);
       const progress = unloadHopElapsed / unloadHopDuration;
@@ -325,7 +306,7 @@ function addTruck(
 
 export function createBoard(
   art: TruckArt, conveyor: ConveyorInput, events: TruckEvents,
-  { entranceY, opening, easyStart }: { entranceY: number; opening: boolean; easyStart: boolean },
+  { easyStart }: { easyStart: boolean },
 ) {
   const board = new Container();
   const loads = createTruckLoads(easyStart);
@@ -333,15 +314,7 @@ export function createBoard(
   const { minX: firstTruckLeft, width: beltWidth } = belt.getLocalBounds();
   const truckSpacing = (beltWidth - art.body.width) / (loads.length - 1);
 
-  const middleLane = (loads.length - 1) / 2;
-  const openingOrder = loads.map((_, lane) => lane)
-    .sort((left, right) => Math.abs(left - middleLane) - Math.abs(right - middleLane));
-  const trucks = loads.map((blocks, lane) => {
-    const arrival = opening
-      ? { distance: entranceY - truckTop, delay: openingOrder.indexOf(lane) * openingStagger }
-      : undefined;
-    return addTruck(board, firstTruckLeft + lane * truckSpacing, blocks, art, conveyor, events, arrival);
-  });
+  const trucks = loads.map((blocks, lane) => addTruck(board, firstTruckLeft + lane * truckSpacing, blocks, art, conveyor, events));
 
   return {
     view: board,
