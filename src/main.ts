@@ -4,6 +4,7 @@ import { Application, Container, FillGradient, Graphics } from 'pixi.js';
 import musicUrl from './assets/casual-music-loop-18.mp3';
 import piecePopUrl from './assets/pop-2.mp3';
 import truckCompleteUrl from './assets/sfx-powerup-bright-1.mp3';
+import winSoundUrl from './assets/win-1.mp3';
 import { boardHeight, boardWidth, conveyorCenter, createBoard } from './board';
 import { createConveyorFlow } from './conveyor-arrows';
 import { conveyorCapacity, createConveyorCargo } from './conveyor-cargo';
@@ -11,13 +12,15 @@ import { addMouseHand, addTutorialHand } from './hand';
 import { startOpening } from './opening';
 import { loadTruckArt } from './truck-art';
 import { createTruckConfetti } from './truck-confetti';
+import { createWinScreen } from './win-screen';
 import './style.css';
 
 const maxRenderScale = 4;
 const maxRenderPixels = 3_000_000;
 const backgroundEdge = '#aa9bcb';
+const winHoldDuration = 1000;
 
-function addBackgroundMusic(canvas: HTMLCanvasElement): void {
+function addBackgroundMusic(canvas: HTMLCanvasElement): () => void {
   const music = new Audio();
   music.preload = 'none';
   music.loop = true;
@@ -29,6 +32,10 @@ function addBackgroundMusic(canvas: HTMLCanvasElement): void {
   }
 
   canvas.addEventListener('click', startMusic);
+  return () => {
+    canvas.removeEventListener('click', startMusic);
+    music.pause();
+  };
 }
 
 function createTruckSounds() {
@@ -61,6 +68,7 @@ function createTruckSounds() {
 
   const pop = loadSound(piecePopUrl);
   const powerUp = loadSound(truckCompleteUrl);
+  const win = loadSound(winSoundUrl);
   return {
     onUnload() {
       if (audio.state === 'running') void pop(1, unloadVolume);
@@ -74,6 +82,9 @@ function createTruckSounds() {
     },
     onComplete() {
       void powerUp();
+    },
+    onWin() {
+      void win();
     },
   };
 }
@@ -99,8 +110,10 @@ async function startPlayable(mount: HTMLElement): Promise<void> {
   }
 
   const initialLayout = getLayout();
-  const [truckArt] = await Promise.all([
+  const animate = !window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+  const [truckArt, winScreen] = await Promise.all([
     loadTruckArt(),
+    createWinScreen(animate),
     app.init({
       width: initialLayout.width,
       height: initialLayout.height,
@@ -126,20 +139,26 @@ async function startPlayable(mount: HTMLElement): Promise<void> {
   const flow = createConveyorFlow();
   const sounds = createTruckSounds();
   const cargo = createConveyorCargo(showCapacity, sounds.onPieceDeparture);
-  const animate = !window.matchMedia('(prefers-reduced-motion: reduce)').matches;
   const confetti = animate ? createTruckConfetti() : undefined;
   const easyStart = import.meta.env.VITE_EASY_START === 'true';
+  const winAfterFirstTruck = import.meta.env.VITE_WIN_AFTER_FIRST_TRUCK === 'true';
+  let winHoldRemaining = 0;
   const scene = createBoard(truckArt, cargo, {
     ...sounds,
     onComplete(x, y) {
       sounds.onComplete();
       confetti?.burst(x, y);
+      if (winAfterFirstTruck || scene.receivers.every((truck) => truck.isComplete())) {
+        if (winHoldRemaining > 0) return;
+        winHoldRemaining = winHoldDuration;
+        world.eventMode = 'none';
+      }
     },
   }, { entranceY: getLayout().viewportBottom, opening: animate, easyStart });
   app.canvas.className = 'playable-canvas';
   mount.prepend(app.canvas);
   board.appendChild(capacity);
-  addBackgroundMusic(app.canvas);
+  const stopBackgroundMusic = addBackgroundMusic(app.canvas);
 
   const handMode = import.meta.env.VITE_HAND_MODE;
   const showTutorialHand = () => handMode === 'tutorial'
@@ -148,6 +167,7 @@ async function startPlayable(mount: HTMLElement): Promise<void> {
   if (handMode === 'mouse') addMouseHand(mount);
 
   const boardFrame = app.stage.addChild(new Container());
+  app.stage.addChild(winScreen.view);
   const world = boardFrame.addChild(new Container());
   const background = new Graphics().rect(-1, -1, 2, 2).fill(new FillGradient({
     type: 'radial',
@@ -164,8 +184,32 @@ async function startPlayable(mount: HTMLElement): Promise<void> {
   let advanceOpening = animate ? startOpening(world, capacity, boardWidth, scene.receivers.length) : undefined;
   let updateHand = animate ? undefined : showTutorialHand();
 
+  function showWin(): void {
+    winScreen.view.visible = true;
+    stopBackgroundMusic();
+    mount.classList.add('playable-won');
+    mount.setAttribute('aria-label', 'Loop Sort complete');
+  }
+
   app.ticker.add(({ deltaMS }) => {
+    if (winHoldRemaining > 0) {
+      const holdTime = Math.min(deltaMS, winHoldRemaining);
+      confetti?.advance(holdTime);
+      winHoldRemaining -= holdTime;
+      if (winHoldRemaining > 0) return;
+      showWin();
+      deltaMS -= holdTime;
+    }
+    if (winScreen.view.visible) {
+      confetti?.advance(deltaMS);
+      if (!winScreen.advance(deltaMS, sounds.onWin)) {
+        app.render();
+        app.stop();
+      }
+      return;
+    }
     scene.advance(deltaMS);
+    if (winHoldRemaining > 0) return;
     const distance = cargo.advance(deltaMS, scene.receivers);
     flow.advance(distance);
     confetti?.advance(deltaMS);
@@ -195,7 +239,9 @@ async function startPlayable(mount: HTMLElement): Promise<void> {
       Math.max(centerY, layout.height - centerY),
     );
     background.scale.set(radius / layout.scale);
+    winScreen.resize(layout.width, layout.height);
     renderedLayout = layout;
+    if (winScreen.view.visible) app.render();
   }
 
   const resizeObserver = new ResizeObserver(resizeCanvas);

@@ -13,7 +13,7 @@ export type TruckArt = {
 };
 
 export const blockHeight = 15;
-const loosePieceCornerRatio = 0.28;
+const loosePieceCornerRatio = 0.4;
 const blockWidth = 28;
 const blockUrls = { pink: pinkBlockUrl, orange: orangeBlockUrl, white: whiteBlockUrl };
 const blockX = 46;

@@ -23,6 +23,7 @@ export type Piece = {
   laneVelocity: number;
   speedFactor: number;
   driftPhase: number;
+  sizeOffset: number;
   from: ReturnType<typeof readPose>;
 };
 
@@ -98,6 +99,7 @@ export function launchPiece(sprite: Sprite, entry: number, index: number, count:
     driftPhase: Math.random() * 2 * Math.PI,
     forwardVelocity: (Math.random() - 0.5) * 18,
     laneVelocity: (Math.random() - 0.5) * 18,
+    sizeOffset: Math.floor(Math.random() * 3) - 1,
   };
 }
 
@@ -149,7 +151,7 @@ export function renderPiece(piece: Piece, progress: number, launching: boolean):
   const rotation = Math.sin(piece.distance * 0.08 + piece.driftPhase) * 0.45 + piece.laneVelocity * 0.025;
   if (launching) {
     if (progress === 1) sprite.texture = getLoosePieceTexture(piece.blockTexture);
-    animatePieceFlight(piece, x, y, pieceWidth, pieceSize, rotation, progress);
+    animatePieceFlight(piece, x, y, pieceWidth + piece.sizeOffset, pieceSize + piece.sizeOffset, rotation, progress);
   } else {
     sprite.position.set(x, y);
     sprite.rotation = rotation;

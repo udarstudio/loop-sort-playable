@@ -116,6 +116,37 @@ main {
   height: 100%;
 }
 
+.playable-won .board,
+.playable-won .playable-logo {
+  opacity: 0;
+  transition: opacity 400ms linear;
+}
+
+.playable-won .playable-hand {
+  visibility: hidden;
+}
+
+.playable-won .download-cta {
+  left: 50%;
+  right: auto;
+  bottom: max(12%, env(safe-area-inset-bottom));
+  translate: -50% 0;
+  width: min(64vw, 260px, max(145px, 38vh));
+  height: auto;
+  aspect-ratio: 398 / 135;
+  animation: win-download-in 280ms ease-out 1400ms both;
+}
+
+@keyframes win-download-in {
+  from { opacity: 0; scale: 0.88; }
+  to { opacity: 1; scale: 1; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .playable-won .board, .playable-won .playable-logo { transition: none; }
+  .playable-won .download-cta { animation: none; }
+}
+
 .conveyor-capacity {
   position: absolute;
   z-index: 2;
