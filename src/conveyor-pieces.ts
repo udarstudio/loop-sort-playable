@@ -1,11 +1,15 @@
-import { Rectangle, Sprite, Texture } from 'pixi.js';
+import { Container, Graphics, Rectangle, Sprite, Texture } from 'pixi.js';
 import { loopLength, positionOnConveyor } from './conveyor-path';
-import { getBaseBlockTexture, getLoosePieceTexture } from './truck-art';
+import { createStretchableBlock, getBaseBlockTexture, getLoosePieceTexture } from './truck-art';
 
 const columns = 4;
-const rows = 4;
+const stackRows = 2;
+const depthLayers = 2;
+const rows = stackRows * depthLayers;
+const stackDepthOffset = 2.2;
 export const piecesPerBlock = columns * rows;
 export const pieceFlightDuration = 300;
+export const pieceLandingTime = 235;
 const beltLanes = 3;
 const pieceSize = 11;
 const pieceWidth = 12;
@@ -91,8 +95,9 @@ export function launchPiece(sprite: Sprite, entry: number, index: number, count:
   const piecesInLane = Math.ceil((count - index % beltLanes) / beltLanes);
   const offset = (Math.floor(index / beltLanes) - (piecesInLane - 1) / 2) * pieceSize
     + (Math.random() - 0.5) * 3;
+  sprite.alpha = 1;
   return {
-    sprite, blockTexture: tileBlocks.get(sprite.texture) ?? sprite.texture, from: readPose(sprite),
+    sprite, blockTexture: tileBlocks.get(sprite.texture) ?? getBaseBlockTexture(sprite.texture), from: readPose(sprite),
     distance: wrapDistance(entry + offset),
     lane: (laneIndex - 1) * laneLimit,
     speedFactor: 0.84 + Math.random() * 0.32,
@@ -158,16 +163,92 @@ export function renderPiece(piece: Piece, progress: number, launching: boolean):
   }
 }
 
-export function preparePieceToStack(piece: Piece, index: number, block: Sprite): void {
+export function preparePieceToStack(piece: Piece): void {
   const { sprite } = piece;
   piece.from = readPose(sprite);
-  sprite.texture = getBlockTiles(block.texture)[index];
+  sprite.texture = getLoosePieceTexture(piece.blockTexture);
   sprite.setSize(piece.from.width, piece.from.height);
 }
 
-export function stackPiece(piece: Piece, index: number, block: Sprite, progress: number): void {
-  const { x, y, width, height } = blockCell(block, index);
-  animatePieceFlight(piece, x, y, width, height, 0, progress);
+export function landingProgress(elapsed: number): number {
+  return Math.max(0, Math.min(1, (elapsed - pieceLandingTime) / (pieceFlightDuration - pieceLandingTime)));
+}
+
+export function createStackFill(texture: Texture, blockHeight: number) {
+  const view = new Container({ eventMode: 'none' });
+  const rowHeight = blockHeight / stackRows;
+  const piecesPerRow = columns * depthLayers;
+
+  function addFace() {
+    const image = createStretchableBlock(texture);
+    image.anchor.y = 1;
+    image.scale.y = blockHeight / texture.height;
+    const mask = new Graphics({ visible: false }).rect(0, -1, 1, 1).fill(0xffffff);
+    view.addChild(image, mask);
+    return { image, mask };
+  }
+
+  const rear = addFace();
+  rear.image.tint = 0xe3dbee;
+  const frontRight = addFace();
+  const frontLeft = addFace();
+
+  function showFace(
+    { image, mask }: ReturnType<typeof addFace>, texture: Texture, height: number, left: number, right: number,
+  ): void {
+    image.visible = height > 0 && left < right;
+    if (!image.visible) return;
+
+    if (image.texture !== texture) image.texture = texture;
+    const unscaledHeight = height / image.scale.y;
+    if (image.height !== unscaledHeight) image.height = unscaledHeight;
+
+    const cropped = left > 0 || right < texture.width;
+    image.mask = cropped ? mask : null;
+    mask.visible = cropped;
+    if (cropped) {
+      mask.x = left;
+      mask.scale.set(right - left, height);
+    }
+  }
+
+  function update(texture: Texture, settledBlocks: number, arrivingPieces: number): void {
+    const completeRows = Math.floor(arrivingPieces / piecesPerRow);
+    const rowProgress = arrivingPieces % piecesPerRow;
+    const height = settledBlocks * blockHeight + completeRows * rowHeight;
+    const grownHeight = height + rowHeight;
+    const width = texture.width;
+    const rearWidth = Math.min(1, rowProgress / columns) * width;
+    const split = Math.max(0, rowProgress / columns - 1) * width;
+
+    // The rear fills from left to right. Then the front's taller half grows across it.
+    showFace(rear, texture, grownHeight - stackDepthOffset, 0, rearWidth);
+    showFace(frontRight, texture, height, split > 0 ? split : width, width);
+    showFace(frontLeft, texture, split > 0 ? grownHeight : height, 0, split > 0 ? split : width);
+  }
+
+  return { view, update };
+}
+
+export function stackPiece(piece: Piece, index: number, block: Sprite, elapsed: number): void {
+  const rowIndex = Math.floor(index / columns);
+  const lowerLayer = rowIndex % depthLayers === 0;
+  const row = stackRows - 1 - Math.floor(rowIndex / depthLayers);
+  const rowHeight = block.height / stackRows;
+  const columnWidth = block.width / columns;
+  const x = block.x + (index % columns + 0.5) * columnWidth;
+  const y = block.y + (row + 0.5) * rowHeight + (lowerLayer ? stackDepthOffset / 2 : 0);
+  const width = columnWidth * 0.94;
+  const height = rowHeight * 0.94;
+  const travel = Math.min(1, elapsed / pieceLandingTime);
+  animatePieceFlight(piece, x, y, width, height, 0, travel * travel * (3 - 2 * travel));
+  const contact = landingProgress(elapsed);
+  if (contact > 0) {
+    const squash = Math.sin(Math.PI * contact);
+    piece.sprite.setSize(width * (1 + 0.18 * squash), height * (1 - 0.28 * squash));
+    piece.sprite.y += height * 0.14 * squash;
+    piece.sprite.alpha = 1 - contact;
+  }
 }
 
 function animatePieceFlight(

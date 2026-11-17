@@ -1,7 +1,10 @@
 import { Container, Graphics, Sprite } from 'pixi.js';
 import type { createConveyorCargo } from './conveyor-cargo';
 import { conveyorEntryDistance } from './conveyor-path';
-import { pieceFlightDuration, piecesPerBlock, preparePieceToStack, stackPiece, type Piece } from './conveyor-pieces';
+import {
+  createStackFill, landingProgress, pieceFlightDuration, pieceLandingTime, piecesPerBlock, preparePieceToStack,
+  stackPiece, type Piece,
+} from './conveyor-pieces';
 import { openingDriveDuration, openingSettleDuration, openingStagger } from './opening';
 import {
   blockColors, createCargoRun, getBaseBlockTexture, getStackedBlockTexture, type BlockColor, type TruckArt,
@@ -142,9 +145,26 @@ function addTruck(
     block.position.set(cargoX, firstBlockY + index * blockHeight);
     return block;
   });
+  const fill = createStackFill(art.blocks[blocks[0]], blockHeight);
+  cargoView.addChild(fill.view);
+  let topRunLength = 0;
+
+  function updateStackFill(): void {
+    const top = cargo[0] ?? loading[0]?.sprite;
+    fill.view.visible = Boolean(top);
+    if (!top) return;
+
+    let arrivingPieces = 0;
+    for (const block of loading) {
+      for (const { elapsed } of block.pieces) arrivingPieces += landingProgress(elapsed);
+    }
+    fill.view.position.set(cargoX, cargoBottom - (cargo.length - topRunLength) * blockHeight);
+    fill.update(getBaseBlockTexture(top.texture), topRunLength, arrivingPieces);
+  }
 
   function updateCargoAppearance(): void {
-    for (const run of cargoView.removeChildren()) run.destroy();
+    while (cargoView.children.length > 1) cargoView.removeChildAt(1).destroy();
+    topRunLength = 0;
     const textures = cargo.map((block) => getBaseBlockTexture(block.texture));
     for (let start = 0; start < cargo.length;) {
       const texture = textures[start];
@@ -153,9 +173,11 @@ function addTruck(
       for (let index = start; index < end; index++) {
         cargo[index].texture = getStackedBlockTexture(texture, index > start, index + 1 < end);
       }
-      cargoView.addChild(createCargoRun(cargo[start], end - start));
+      if (start === 0) topRunLength = end;
+      else cargoView.addChild(createCargoRun(cargo[start], end - start));
       start = end;
     }
+    updateStackFill();
   }
   updateCargoAppearance();
 
@@ -207,6 +229,7 @@ function addTruck(
         remaining -= removed;
         if (block.pieces.length > 0) {
           block.landed = Math.min(block.landed, block.pieces.length);
+          updateStackFill();
           return movedPieces > 0;
         }
         loading.pop();
@@ -214,16 +237,13 @@ function addTruck(
       }
     }
 
-    const first = cargo[0];
-    if (!first) return movedPieces > 0;
-
-    let runLength = 1;
-    const texture = getBaseBlockTexture(first.texture);
-    while (runLength < cargo.length && getBaseBlockTexture(cargo[runLength].texture) === texture) runLength++;
-
-    const moved = conveyor.addBlocks(cargo.slice(0, runLength), distance, sourceOffsetY);
-    cargo.splice(0, moved);
-    if (moved > 0) updateCargoAppearance();
+    const moved = topRunLength > 0 ? conveyor.addBlocks(cargo.slice(0, topRunLength), distance, sourceOffsetY) : 0;
+    if (moved > 0) {
+      cargo.splice(0, moved);
+      updateCargoAppearance();
+    } else if (movedPieces > 0) {
+      updateStackFill();
+    }
     return movedPieces > 0 || moved > 0;
   }
 
@@ -236,14 +256,14 @@ function addTruck(
 
     if (!block || block.pieces.length === piecesPerBlock) {
       if (cargo.length + loading.length >= truckCapacity) return false;
-      const sprite = new Sprite(getStackedBlockTexture(texture, false, Boolean(top)));
+      const sprite = new Sprite(texture);
       sprite.height = blockHeight;
       sprite.position.set(cargoX, cargoBottom - (cargo.length + loading.length + 1) * blockHeight);
       block = { sprite, pieces: [], landed: 0 };
       loading.push(block);
     }
 
-    preparePieceToStack(piece, block.pieces.length, block.sprite);
+    preparePieceToStack(piece);
     block.pieces.push({ piece, elapsed: 0 });
     return true;
   }
@@ -272,26 +292,31 @@ function addTruck(
     for (const block of loading) {
       for (let index = block.landed; index < block.pieces.length; index++) {
         const flight = block.pieces[index];
-        flight.elapsed += deltaMS;
-        const progress = Math.min(1, flight.elapsed / pieceFlightDuration);
-        stackPiece(flight.piece, index, block.sprite, progress);
-        if (progress === 1) {
-          truck.addChild(flight.piece.sprite);
+        const previousElapsed = flight.elapsed;
+        flight.elapsed = Math.min(pieceFlightDuration, flight.elapsed + deltaMS);
+        stackPiece(flight.piece, index, block.sprite, flight.elapsed);
+        if (previousElapsed < pieceLandingTime && flight.elapsed >= pieceLandingTime) pieceLanded = true;
+        if (flight.elapsed === pieceFlightDuration) {
+          flight.piece.sprite.removeFromParent();
           block.landed++;
-          pieceLanded = true;
         }
       }
     }
 
+    const previousCargoLength = cargo.length;
     while (loading[0]?.landed === piecesPerBlock) {
       const block = loading.shift()!;
       for (const { piece } of block.pieces) piece.sprite.destroy();
       cargo.unshift(block.sprite);
+    }
+    if (cargo.length !== previousCargoLength) {
       updateCargoAppearance();
       if (isComplete()) {
         markComplete();
         events.onComplete(truck.x, truck.y);
       }
+    } else if (loading.length > 0) {
+      updateStackFill();
     }
     return pieceLanded;
   }

@@ -49,16 +49,20 @@ export function getStackedBlockTexture(texture: Texture, sameAbove: boolean, sam
   return sameBelow ? style.top : style.block;
 }
 
-export function createCargoRun(first: Sprite, length: number): Sprite | NineSliceSprite {
-  const texture = getBaseBlockTexture(first.texture);
-  const view = length === 1 ? new Sprite(texture) : new NineSliceSprite({
+export function createStretchableBlock(texture: Texture, height = texture.height): NineSliceSprite {
+  return new NineSliceSprite({
     texture,
     leftWidth: 0,
     rightWidth: 0,
     topHeight: blockTopHeight,
     bottomHeight: blockBottomHeight,
-    height: texture.height * length,
+    height,
   });
+}
+
+export function createCargoRun(first: Sprite, length: number): Sprite | NineSliceSprite {
+  const texture = getBaseBlockTexture(first.texture);
+  const view = length === 1 ? new Sprite(texture) : createStretchableBlock(texture, texture.height * length);
   view.position.copyFrom(first.position);
   view.scale.set(first.width / texture.width, first.height / texture.height);
   return view;
