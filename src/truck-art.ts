@@ -21,32 +21,18 @@ const blockY = { pink: 0, orange: 17, white: 34 } as const;
 const blockTopHeight = 5;
 const blockBottomHeight = 6;
 const loosePieceY = { pink: 52, orange: 69, white: 86 } as const;
-const bottomBlockOffset = 104;
-const topBlockOffset = 155;
-const blockStyles = new WeakMap<Texture, {
-  block: Texture;
-  top: Texture;
-  middle: Texture;
-  bottom: Texture;
-  loose: Texture;
-}>();
+const loosePieces = new WeakMap<Texture, Texture>();
+const baseBlocks = new WeakMap<Texture, Texture>();
 const bodyWidth = 44;
 const bodyHeight = 297;
 const atlasResolution = 2;
 
 export function getLoosePieceTexture(block: Texture): Texture {
-  return blockStyles.get(block)?.loose ?? block;
+  return loosePieces.get(block) ?? block;
 }
 
 export function getBaseBlockTexture(texture: Texture): Texture {
-  return blockStyles.get(texture)?.block ?? texture;
-}
-
-export function getStackedBlockTexture(texture: Texture, sameAbove: boolean, sameBelow: boolean): Texture {
-  const style = blockStyles.get(texture);
-  if (!style) return texture;
-  if (sameAbove) return sameBelow ? style.middle : style.bottom;
-  return sameBelow ? style.top : style.block;
+  return baseBlocks.get(texture) ?? texture;
 }
 
 export function createStretchableBlock(texture: Texture, height = texture.height): NineSliceSprite {
@@ -61,7 +47,7 @@ export function createStretchableBlock(texture: Texture, height = texture.height
 }
 
 export function createCargoRun(first: Sprite, length: number): Sprite | NineSliceSprite {
-  const texture = getBaseBlockTexture(first.texture);
+  const { texture } = first;
   const view = length === 1 ? new Sprite(texture) : createStretchableBlock(texture, texture.height * length);
   view.position.copyFrom(first.position);
   view.scale.set(first.width / texture.width, first.height / texture.height);
@@ -102,34 +88,18 @@ export async function loadTruckArt(): Promise<TruckArt> {
     context.clip();
     context.drawImage(blockImage, x, pieceY, width, height);
     context.restore();
-
-    // The pieces waiting to depart use the same caps and center as the solid run.
-    const bottomY = (blockY[color] + bottomBlockOffset) * atlasResolution;
-    const topY = (blockY[color] + topBlockOffset) * atlasResolution;
-    const topCap = blockTopHeight * atlasResolution;
-    const bottomCap = blockBottomHeight * atlasResolution;
-    const middleHeight = height - topCap - bottomCap;
-    context.drawImage(atlas, x, y, width, topCap, x, topY, width, topCap);
-    context.drawImage(atlas, x, y + topCap, width, middleHeight, x, topY + topCap, width, height - topCap);
-    context.drawImage(atlas, x, y + topCap, width, middleHeight, x, bottomY, width, height - bottomCap);
-    context.drawImage(atlas, x, y + height - bottomCap, width, bottomCap, x, bottomY + height - bottomCap, width, bottomCap);
   }
 
   const source = new CanvasSource({ resource: atlas, resolution: atlasResolution });
-  const blockTexture = (y: number, height = blockHeight) => new Texture({
+  const blockTexture = (y: number) => new Texture({
     source,
-    frame: new Rectangle(blockX, y, blockWidth, height),
+    frame: new Rectangle(blockX, y, blockWidth, blockHeight),
   });
   const blocks = { pink: blockTexture(blockY.pink), orange: blockTexture(blockY.orange), white: blockTexture(blockY.white) };
   for (const color of blockColors) {
-    const style = {
-      block: blocks[color],
-      top: blockTexture(blockY[color] + topBlockOffset),
-      middle: blockTexture(blockY[color] + blockTopHeight, blockHeight - blockTopHeight - blockBottomHeight),
-      bottom: blockTexture(blockY[color] + bottomBlockOffset),
-      loose: blockTexture(loosePieceY[color]),
-    };
-    for (const texture of Object.values(style)) blockStyles.set(texture, style);
+    const loose = blockTexture(loosePieceY[color]);
+    loosePieces.set(blocks[color], loose);
+    baseBlocks.set(loose, blocks[color]);
   }
   const body = new Texture({ source, frame: new Rectangle(0, 0, bodyWidth, bodyHeight) });
 

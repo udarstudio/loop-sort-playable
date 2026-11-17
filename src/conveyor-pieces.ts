@@ -1,13 +1,13 @@
-import { Container, Graphics, Rectangle, Sprite, Texture } from 'pixi.js';
+import { Container, Graphics, Sprite, type Texture } from 'pixi.js';
 import { loopLength, positionOnConveyor } from './conveyor-path';
 import { createStretchableBlock, getBaseBlockTexture, getLoosePieceTexture } from './truck-art';
 
 const columns = 4;
 const stackRows = 2;
 const depthLayers = 2;
-const rows = stackRows * depthLayers;
+const piecesPerRow = columns * depthLayers;
 const stackDepthOffset = 2.2;
-export const piecesPerBlock = columns * rows;
+export const piecesPerBlock = piecesPerRow * stackRows;
 export const pieceFlightDuration = 300;
 export const pieceLandingTime = 235;
 const beltLanes = 3;
@@ -15,8 +15,6 @@ const pieceSize = 11;
 const pieceWidth = 12;
 const collisionDiameter = pieceSize;
 const laneLimit = 10;
-const blockTiles = new WeakMap<Texture, Texture[]>();
-const tileBlocks = new WeakMap<Texture, Texture>();
 
 export type Piece = {
   sprite: Sprite;
@@ -35,49 +33,26 @@ export function wrapDistance(distance: number): number {
   return ((distance % loopLength) + loopLength) % loopLength;
 }
 
-function getBlockTiles(texture: Texture): Texture[] {
-  let tiles = blockTiles.get(texture);
-  if (!tiles) {
-    const { frame, source } = texture;
-    const tileWidth = frame.width / columns;
-    const tileHeight = frame.height / rows;
-    tiles = Array.from({ length: piecesPerBlock }, (_, index) => new Texture({
-      source,
-      frame: new Rectangle(
-        frame.x + (index % columns) * tileWidth,
-        frame.y + cellRow(index) * tileHeight,
-        tileWidth,
-        tileHeight,
-      ),
-    }));
-    const block = getBaseBlockTexture(texture);
-    for (const tile of tiles) tileBlocks.set(tile, block);
-    blockTiles.set(texture, tiles);
-  }
-  return tiles;
-}
-
-function cellRow(index: number): number {
-  return rows - 1 - Math.floor(index / columns);
-}
-
-function blockCell(block: Sprite, index: number) {
-  const width = block.width / columns;
-  const height = block.height / rows;
+function stackCell(block: Sprite, index: number) {
+  const rear = Math.floor(index / columns) % depthLayers === 0;
+  const row = stackRows - 1 - Math.floor(index / piecesPerRow);
+  const rowHeight = block.height / stackRows;
+  const columnWidth = block.width / columns;
   return {
-    x: block.x + (index % columns + 0.5) * width,
-    y: block.y + (cellRow(index) + 0.5) * height,
-    width, height,
+    x: block.x + (index % columns + 0.5) * columnWidth,
+    y: block.y + (row + 0.5) * rowHeight + (rear ? stackDepthOffset / 2 : 0),
+    width: columnWidth * 0.94,
+    height: rowHeight * 0.94,
   };
 }
 
 export function createPieces(block: Sprite): Sprite[] {
-  const tiles = getBlockTiles(block.texture);
+  const texture = getLoosePieceTexture(block.texture);
   // Unload from top right to bottom left, the reverse of stacking order.
-  return tiles.map((_, departureIndex) => {
+  return Array.from({ length: piecesPerBlock }, (_, departureIndex) => {
     const index = piecesPerBlock - 1 - departureIndex;
-    const { x, y, width, height } = blockCell(block, index);
-    const sprite = new Sprite(tiles[index]);
+    const { x, y, width, height } = stackCell(block, index);
+    const sprite = new Sprite(texture);
     sprite.anchor.set(0.5);
     sprite.setSize(width, height);
     sprite.position.set(x, y);
@@ -97,7 +72,7 @@ export function launchPiece(sprite: Sprite, entry: number, index: number, count:
     + (Math.random() - 0.5) * 3;
   sprite.alpha = 1;
   return {
-    sprite, blockTexture: tileBlocks.get(sprite.texture) ?? getBaseBlockTexture(sprite.texture), from: readPose(sprite),
+    sprite, blockTexture: getBaseBlockTexture(sprite.texture), from: readPose(sprite),
     distance: wrapDistance(entry + offset),
     lane: (laneIndex - 1) * laneLimit,
     speedFactor: 0.84 + Math.random() * 0.32,
@@ -155,7 +130,6 @@ export function renderPiece(piece: Piece, progress: number, launching: boolean):
   const y = sprite.y + Math.cos(heading) * lane;
   const rotation = Math.sin(piece.distance * 0.08 + piece.driftPhase) * 0.45 + piece.laneVelocity * 0.025;
   if (launching) {
-    if (progress === 1) sprite.texture = getLoosePieceTexture(piece.blockTexture);
     animatePieceFlight(piece, x, y, pieceWidth + piece.sizeOffset, pieceSize + piece.sizeOffset, rotation, progress);
   } else {
     sprite.position.set(x, y);
@@ -177,7 +151,6 @@ export function landingProgress(elapsed: number): number {
 export function createStackFill(texture: Texture, blockHeight: number) {
   const view = new Container({ eventMode: 'none' });
   const rowHeight = blockHeight / stackRows;
-  const piecesPerRow = columns * depthLayers;
 
   function addFace() {
     const image = createStretchableBlock(texture);
@@ -212,10 +185,10 @@ export function createStackFill(texture: Texture, blockHeight: number) {
     }
   }
 
-  function update(texture: Texture, settledBlocks: number, arrivingPieces: number): void {
-    const completeRows = Math.floor(arrivingPieces / piecesPerRow);
-    const rowProgress = arrivingPieces % piecesPerRow;
-    const height = settledBlocks * blockHeight + completeRows * rowHeight;
+  function update(texture: Texture, pieces: number): void {
+    const completeRows = Math.floor(pieces / piecesPerRow);
+    const rowProgress = pieces % piecesPerRow;
+    const height = completeRows * rowHeight;
     const grownHeight = height + rowHeight;
     const width = texture.width;
     const rearWidth = Math.min(1, rowProgress / columns) * width;
@@ -231,15 +204,7 @@ export function createStackFill(texture: Texture, blockHeight: number) {
 }
 
 export function stackPiece(piece: Piece, index: number, block: Sprite, elapsed: number): void {
-  const rowIndex = Math.floor(index / columns);
-  const lowerLayer = rowIndex % depthLayers === 0;
-  const row = stackRows - 1 - Math.floor(rowIndex / depthLayers);
-  const rowHeight = block.height / stackRows;
-  const columnWidth = block.width / columns;
-  const x = block.x + (index % columns + 0.5) * columnWidth;
-  const y = block.y + (row + 0.5) * rowHeight + (lowerLayer ? stackDepthOffset / 2 : 0);
-  const width = columnWidth * 0.94;
-  const height = rowHeight * 0.94;
+  const { x, y, width, height } = stackCell(block, index);
   const travel = Math.min(1, elapsed / pieceLandingTime);
   animatePieceFlight(piece, x, y, width, height, 0, travel * travel * (3 - 2 * travel));
   const contact = landingProgress(elapsed);

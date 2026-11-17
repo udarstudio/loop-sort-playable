@@ -32,11 +32,18 @@ type BeltPiece = Piece & {
   sourceOffsetY?: () => number;
 };
 
+type Departure = {
+  count: number;
+  inFlight: number;
+  remaining: number;
+  onProgress?: (departed: number, finished: boolean) => void;
+};
+
 export function createConveyorCargo(onCountChange: (count: number) => void, onPieceDeparture: () => void) {
   const view = new Container();
   const belt: BeltPiece[] = [];
   const moving: BeltPiece[] = [];
-  const departures = new Map<number, number>();
+  const departures = new Map<number, Departure>();
 
   function blockCount(): number {
     return Math.ceil(belt.length / piecesPerBlock);
@@ -48,41 +55,41 @@ export function createConveyorCargo(onCountChange: (count: number) => void, onPi
 
   function launch(
     sprites: readonly Sprite[], count: number, sourceDistance: number, entry: number,
-    delay: number, sourceOffsetY?: () => number,
+    firstIndex: number, sourceOffsetY: () => number,
   ): void {
-    if (count === 0) return;
-    departures.set(sourceDistance, (departures.get(sourceDistance) ?? 0) + count);
     for (let index = 0; index < count; index++) {
       const piece = launchPiece(sprites[index], entry, index, count);
-      piece.sprite.y = piece.from.y + (sourceOffsetY?.() ?? 0);
+      piece.sprite.visible = false;
       view.addChild(piece.sprite);
       belt.push({
-        ...piece, elapsed: -delay - index * pieceDepartureInterval,
+        ...piece, elapsed: -(firstIndex + index) * pieceDepartureInterval,
         previousDistance: piece.distance, sourceDistance, canReturnToSource: false, sourceOffsetY,
       });
     }
   }
 
-  function addPieces(sprites: readonly Sprite[], sourceDistance: number, sourceOffsetY?: () => number): number {
+  function unload(
+    pieces: readonly Sprite[], blocks: readonly Sprite[], sourceDistance: number,
+    sourceOffsetY: () => number, onProgress: NonNullable<Departure['onProgress']>,
+  ): { pieces: number; blocks: number } {
     const before = blockCount();
-    const added = Math.min(sprites.length, availablePieces());
-    launch(sprites, added, sourceDistance, sourceDistance, 0, sourceOffsetY);
-    if (blockCount() !== before) onCountChange(blockCount());
-    return added;
-  }
+    const space = availablePieces();
+    const addedPieces = Math.min(pieces.length, space);
+    const addedBlocks = Math.min(blocks.length, Math.floor((space - addedPieces) / piecesPerBlock));
+    const count = addedPieces + addedBlocks * piecesPerBlock;
+    if (count === 0) return { pieces: 0, blocks: 0 };
 
-  function addBlocks(blocks: readonly Sprite[], sourceDistance: number, sourceOffsetY?: () => number): number {
-    const before = blockCount();
-    const added = Math.min(blocks.length, Math.floor(availablePieces() / piecesPerBlock));
-    for (let index = 0; index < added; index++) {
+    departures.set(sourceDistance, { count, inFlight: count, remaining: count, onProgress });
+    launch(pieces, addedPieces, sourceDistance, sourceDistance, 0, sourceOffsetY);
+    for (let index = 0; index < addedBlocks; index++) {
       const block = blocks[index];
       const entry = wrapDistance(sourceDistance - index * launchSpacing);
       const sprites = createPieces(block);
-      launch(sprites, sprites.length, sourceDistance, entry, index * piecesPerBlock * pieceDepartureInterval, sourceOffsetY);
+      launch(sprites, sprites.length, sourceDistance, entry, addedPieces + index * piecesPerBlock, sourceOffsetY);
       block.destroy();
     }
     if (blockCount() !== before) onCountChange(blockCount());
-    return added;
+    return { pieces: addedPieces, blocks: addedBlocks };
   }
 
   function advance(deltaMS: number, receivers: readonly ConveyorReceiver[]): number {
@@ -105,23 +112,34 @@ export function createConveyorCargo(onCountChange: (count: number) => void, onPi
     }
 
     let pieceDeparted = false;
+    for (const departure of departures.values()) departure.remaining = 0;
     for (const piece of belt) {
       const launching = piece.elapsed < pieceFlightDuration;
       const waiting = piece.elapsed <= 0;
       piece.elapsed = Math.min(pieceFlightDuration, piece.elapsed + deltaMS);
-      if (waiting && piece.sourceOffsetY) {
-        piece.sprite.y = piece.from.y + piece.sourceOffsetY();
-        if (piece.elapsed > 0) piece.from.y = piece.sprite.y;
+      if (launching) {
+        const departure = departures.get(piece.sourceDistance)!;
+        const progress = Math.max(0, Math.min(1, piece.elapsed / pieceDepartureInterval));
+        departure.remaining += 1 - progress;
+        if (piece.elapsed <= 0) continue;
+
+        piece.sprite.alpha = progress;
+        if (waiting) {
+          piece.sprite.visible = true;
+          piece.from.y += piece.sourceOffsetY!();
+          piece.sourceOffsetY = undefined;
+          pieceDeparted = true;
+        }
+        if (piece.elapsed === pieceFlightDuration) departure.inFlight--;
       }
-      if (piece.elapsed <= 0) continue;
-      if (waiting) pieceDeparted = true;
       renderPiece(piece, piece.elapsed / pieceFlightDuration, launching);
       if (piece.distance < piece.previousDistance) piece.canReturnToSource = true;
-      if (launching && piece.elapsed === pieceFlightDuration) {
-        const remaining = departures.get(piece.sourceDistance)! - 1;
-        if (remaining === 0) departures.delete(piece.sourceDistance);
-        else departures.set(piece.sourceDistance, remaining);
-      }
+    }
+    for (const [source, departure] of departures) {
+      const finished = departure.remaining === 0;
+      departure.onProgress?.(departure.count - departure.remaining, finished);
+      if (finished) departure.onProgress = undefined;
+      if (departure.inFlight === 0) departures.delete(source);
     }
     if (pieceDeparted) onPieceDeparture();
 
@@ -147,7 +165,7 @@ export function createConveyorCargo(onCountChange: (count: number) => void, onPi
   }
 
   return {
-    view, addBlocks, addPieces, advance, availablePieces,
+    view, unload, advance, availablePieces,
     isUnloading: (sourceDistance: number) => departures.has(sourceDistance),
   };
 }
