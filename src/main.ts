@@ -5,7 +5,7 @@ import musicUrl from './assets/casual-music-loop-18.mp3';
 import piecePopUrl from './assets/pop-2.mp3';
 import truckCompleteUrl from './assets/sfx-powerup-bright-1.mp3';
 import winSoundUrl from './assets/win-1.mp3';
-import { boardHeight, boardWidth, conveyorCenter, createBoard } from './board';
+import { boardHeight, boardWidth, conveyorCenter, conveyorTop, createBoard } from './board';
 import { createConveyorFlow } from './conveyor-arrows';
 import { conveyorCapacity, createConveyorCargo } from './conveyor-cargo';
 import { addMouseHand, addTutorialHand } from './hand';
@@ -94,6 +94,7 @@ async function startPlayable(mount: HTMLElement): Promise<void> {
   const board = document.createElement('div');
   board.className = 'board';
   mount.style.setProperty('--board-aspect', String(boardWidth / boardHeight));
+  mount.style.setProperty('--conveyor-top-ratio', String(conveyorTop / boardWidth));
   mount.appendChild(board);
 
   function getLayout() {

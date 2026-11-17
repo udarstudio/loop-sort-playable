@@ -19,14 +19,20 @@ body {
 
 main {
   --viewport-height: 100vh;
-  --logo-width: clamp(100px, 29vw, 140px);
-  --logo-top: max(12px, env(safe-area-inset-top));
-  --logo-space: calc(var(--logo-top) + var(--logo-width) * 383 / 600);
-  --download-width: clamp(178px, 56vw, 232px);
+  --safe-inset: max(12px, env(safe-area-inset-top), env(safe-area-inset-bottom));
+  --logo-width: clamp(112px, 34vw, 168px);
+  --logo-height: calc(var(--logo-width) * 383 / 600);
+  --logo-space: calc(var(--logo-height) + var(--safe-inset));
+  --download-width: clamp(198px, 62vw, 268px);
   --download-height: calc(var(--download-width) * 135 / 398);
-  --download-bottom: max(12px, env(safe-area-inset-bottom));
-  --download-space: calc(var(--download-height) + var(--download-bottom) + 8px);
+  --download-space: calc(var(--download-height) + var(--safe-inset) + 8px);
   --board-width: min(100vw, calc((var(--viewport-height) - var(--logo-space) - var(--download-space)) * var(--board-aspect)));
+  --board-height: calc(var(--board-width) / var(--board-aspect));
+  --board-top: calc((var(--viewport-height) - var(--board-height) + var(--logo-space) - var(--download-space)) / 2);
+  --belt-top: calc(var(--board-top) + var(--board-width) * var(--conveyor-top-ratio));
+  --hud-inset: max(var(--safe-inset), (var(--belt-top) - var(--logo-height)) / 2);
+  --logo-top: var(--hud-inset, var(--safe-inset));
+  --download-bottom: var(--hud-inset, var(--safe-inset));
   position: relative;
   box-sizing: border-box;
   display: grid;

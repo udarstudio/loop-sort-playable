@@ -10,6 +10,7 @@ import { createTruckHeadlights } from './truck-headlights';
 
 export const boardWidth = 360;
 export const boardHeight = 656;
+export const conveyorTop = 38;
 const conveyorOpening = { x: 60, y: 74, width: 240, height: 178, radius: 17 };
 export const conveyorCenter = {
   x: conveyorOpening.x + conveyorOpening.width / 2,
@@ -85,7 +86,7 @@ function createConveyor(): Graphics {
   const conveyor = new Graphics();
   const opening = conveyorOpening;
   for (const [x, y, width, height, radius, color] of [
-    [24, 38, 312, 250, 53, 0x64509b],
+    [24, conveyorTop, 312, 250, 53, 0x64509b],
     [27, 40, 306, 245, 50, 0x382b58],
     [57, 71, 246, 184, 20, 0x7561af],
   ]) {

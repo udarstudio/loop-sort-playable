@@ -10,7 +10,7 @@ const beltLanes = 3;
 const pieceSize = 11;
 const pieceWidth = 12;
 const collisionDiameter = pieceSize;
-const laneLimit = 8;
+const laneLimit = 10;
 const blockTiles = new WeakMap<Texture, Texture[]>();
 const tileBlocks = new WeakMap<Texture, Texture>();
 
