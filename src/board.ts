@@ -6,7 +6,6 @@ import { openingDriveDuration, openingSettleDuration, openingStagger } from './o
 import {
   blockColors, createCargoRun, getBaseBlockTexture, getStackedBlockTexture, type BlockColor, type TruckArt,
 } from './truck-art';
-import { createTruckCover } from './truck-cover';
 import { createTruckHeadlights } from './truck-headlights';
 
 export const boardWidth = 360;
@@ -20,10 +19,8 @@ export const conveyorCenter = {
 const truckCapacity = 16;
 const truckTop = 302;
 const openingArrivalDuration = openingDriveDuration + openingSettleDuration;
-const openingHeadlightHoldDuration = 300;
 const unloadHopDuration = 180;
-const completionRollDuration = 1200;
-const completionRollDistance = 22;
+const completionCheckColors = { pink: 0x7b1f53, orange: 0x834018, white: 0x635773 };
 type OpeningArrival = { distance: number; delay: number };
 
 function shuffle<T>(items: T[]): T[] {
@@ -88,7 +85,6 @@ function createConveyor(): Graphics {
   const conveyor = new Graphics();
   const opening = conveyorOpening;
   for (const [x, y, width, height, radius, color] of [
-    [22, 43, 316, 248, 54, 0x14112f],
     [24, 38, 312, 250, 53, 0x64509b],
     [27, 40, 306, 245, 50, 0x382b58],
     [57, 71, 246, 184, 20, 0x7561af],
@@ -120,15 +116,12 @@ function addTruck(
   const truck = board.addChild(new Container());
   truck.visible = !arrival;
   let parkingElapsed = -(arrival?.delay ?? 0);
-  let openingHeadlightTimeLeft = arrival ? openingHeadlightHoldDuration : 0;
   let unloadHopElapsed = unloadHopDuration;
 
   const body = new Sprite(art.body);
   body.position.set(left, truckTop);
   truck.addChild(body);
-  const headlights = truck.addChild(createTruckHeadlights());
-  headlights.position.copyFrom(body.position);
-  headlights.alpha = arrival ? 1 : 0;
+  truck.addChild(createTruckHeadlights()).position.copyFrom(body.position);
   const centerX = body.x + body.width / 2;
   const centerY = truckTop + body.height / 2;
   truck.pivot.set(centerX, centerY);
@@ -171,20 +164,16 @@ function addTruck(
     return cargo.every((block) => getBaseBlockTexture(block.texture) === first);
   }
 
-  let cover: ReturnType<typeof createTruckCover> | undefined;
-  let completionElapsed = 0;
-  function completeTruck(animate: boolean): void {
+  function markComplete(): void {
     body.eventMode = 'none';
     body.cursor = 'default';
     const texture = getBaseBlockTexture(cargo[0].texture);
-    const color = blockColors.find((color) => art.blocks[color] === texture);
-    if (!color) return;
-    cover = createTruckCover(color, cargo[0].width, cargoHeight, animate);
-    cover.view.position.set(cargoX, cargoBottom - cargoHeight);
-    truck.addChild(cover.view);
-    headlights.alpha = animate ? 0 : 1;
-    completionElapsed = animate ? 0 : completionRollDuration;
-    if (!animate && !arrival) truck.y = centerY + completionRollDistance;
+    const color = blockColors.find((color) => art.blocks[color] === texture) ?? 'white';
+    const checkmark = truck.addChild(new Graphics()
+      .moveTo(-6, 0).lineTo(-2, 4).lineTo(6, -5)
+      .stroke({ color: completionCheckColors[color], width: 3, cap: 'round', join: 'round' }));
+    checkmark.position.set(centerX, cargoBottom - cargoHeight / 2);
+    checkmark.eventMode = 'none';
   }
 
   function canUnload(): boolean {
@@ -192,9 +181,10 @@ function addTruck(
       && !loading.some((block) => block.landed < block.pieces.length);
   }
 
+  const startsComplete = isComplete();
   body.eventMode = arrival ? 'none' : 'static';
   body.cursor = 'pointer';
-  if (isComplete()) completeTruck(false);
+  if (startsComplete) markComplete();
   body.on('pointertap', ({ button }) => {
     if (button !== 0 || !canUnload() || !unload()) return;
     unloadHopElapsed = 0;
@@ -262,30 +252,13 @@ function addTruck(
       parkingElapsed = Math.min(openingArrivalDuration, parkingElapsed + deltaMS);
       if (parkingElapsed <= 0) return false;
       truck.visible = true;
-      const parkedY = centerY + (cover ? completionRollDistance : 0);
       const drive = Math.min(1, parkingElapsed / openingDriveDuration);
       const settle = Math.max(0, (parkingElapsed - openingDriveDuration) / openingSettleDuration);
       const travel = drive * (0.85 + 0.15 * drive);
       const rebound = -16 * Math.sin(2 * Math.PI * settle) * (1 - settle) ** 2;
-      truck.y = parkedY + (centerY + arrival.distance - parkedY) * (1 - travel) + rebound;
-      if (!cover && parkingElapsed === openingArrivalDuration) body.eventMode = 'static';
+      truck.y = centerY + arrival.distance * (1 - travel) + rebound;
+      if (!startsComplete && parkingElapsed === openingArrivalDuration) body.eventMode = 'static';
       return false;
-    }
-
-    if (cover) {
-      cover.advance(deltaMS);
-      if (completionElapsed < completionRollDuration) {
-        completionElapsed = Math.min(completionRollDuration, completionElapsed + deltaMS);
-        const progress = completionElapsed / completionRollDuration;
-        truck.y = centerY + completionRollDistance * (1 - (1 - progress) ** 3);
-        headlights.alpha = Math.min(1, completionElapsed / 150);
-      }
-      return false;
-    }
-
-    if (openingHeadlightTimeLeft > 0) {
-      openingHeadlightTimeLeft = Math.max(0, openingHeadlightTimeLeft - deltaMS);
-      if (openingHeadlightTimeLeft === 0) headlights.alpha = 0;
     }
 
     if (unloadHopElapsed < unloadHopDuration) {
@@ -315,7 +288,7 @@ function addTruck(
       cargo.unshift(block.sprite);
       updateCargoAppearance();
       if (isComplete()) {
-        completeTruck(true);
+        markComplete();
         events.onComplete(truck.x, truck.y);
       }
     }
@@ -328,7 +301,6 @@ function addTruck(
     hint() {
       const top = loading.at(-1)?.sprite ?? cargo[0];
       if (!top || !canUnload() || conveyor.availablePieces() < (loading.length ? 1 : piecesPerBlock)) return;
-      if (isComplete()) return;
       return { x: centerX, y: Math.max(truckTop + 44, top.y + 12) };
     },
   };
