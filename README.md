@@ -4,6 +4,8 @@ PixiJS and TypeScript prototype for the Voodoo playable ad task. Translucent arr
 
 The truck sprite is in `src/assets/truck-body.png`. The original cargo art is stored as individual PNGs in `src/assets/blocks/`. The game packs these files into one texture at startup.
 
+The [palette](docs/palette.json) is the source of truth for the base hex and RGB colors in both variants.
+
 ## Local development
 
 Use Node.js 20.19+ on the Node 20 line, or Node.js 22.12+.

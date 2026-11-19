@@ -1,0 +1,12 @@
+{
+  "classic": {
+    "pink": { "hex": "#FA529D", "rgb": [250, 82, 157] },
+    "orange": { "hex": "#FC951F", "rgb": [252, 149, 31] },
+    "white": { "hex": "#E9E4F4", "rgb": [233, 228, 244] }
+  },
+  "alternative": {
+    "rose": { "hex": "#EF61A8", "rgb": [239, 97, 168] },
+    "yellow": { "hex": "#F9BF3A", "rgb": [249, 191, 58] },
+    "blue": { "hex": "#3798EC", "rgb": [55, 152, 236] }
+  }
+}

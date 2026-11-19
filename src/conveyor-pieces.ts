@@ -1,6 +1,6 @@
 import { Container, Graphics, Sprite, type Texture } from 'pixi.js';
 import { loopLength, positionOnConveyor } from './conveyor-path';
-import { createStretchableBlock, getBaseBlockTexture, getLoosePieceTexture } from './truck-art';
+import { createStretchableBlock, getBaseBlockTexture, getLoosePieceTexture, getPieceShineTexture } from './truck-art';
 
 const columns = 4;
 const stackRows = 2;
@@ -18,6 +18,7 @@ const laneLimit = 10;
 
 export type Piece = {
   sprite: Sprite;
+  shine: Sprite;
   blockTexture: Texture;
   distance: number;
   lane: number;
@@ -72,7 +73,8 @@ export function launchPiece(sprite: Sprite, entry: number, index: number, count:
     + (Math.random() - 0.5) * 3;
   sprite.alpha = 1;
   return {
-    sprite, blockTexture: getBaseBlockTexture(sprite.texture), from: readPose(sprite),
+    sprite, shine: new Sprite({ texture: getPieceShineTexture(sprite.texture), anchor: 0.5, eventMode: 'none' }),
+    blockTexture: getBaseBlockTexture(sprite.texture), from: readPose(sprite),
     distance: wrapDistance(entry + offset),
     lane: (laneIndex - 1) * laneLimit,
     speedFactor: 0.84 + Math.random() * 0.32,
@@ -135,6 +137,18 @@ export function renderPiece(piece: Piece, progress: number, launching: boolean):
     sprite.position.set(x, y);
     sprite.rotation = rotation;
   }
+  updatePieceShine(piece);
+}
+
+function updatePieceShine({ sprite, shine }: Piece): void {
+  const size = Math.min(sprite.width, sprite.height);
+  const turn = Math.sin(sprite.rotation * 2);
+  const facing = (Math.cos(sprite.rotation * 2) + 1) / 2;
+  // Both reflections are positioned within the same texture over the cube's face.
+  shine.position.set(sprite.x - size * turn * 0.025, sprite.y + size * (facing - 1) * 0.015);
+  shine.setSize(size);
+  shine.alpha = sprite.alpha * (0.45 + facing * 0.08);
+  shine.visible = sprite.visible;
 }
 
 export function preparePieceToStack(piece: Piece): void {
@@ -214,6 +228,7 @@ export function stackPiece(piece: Piece, index: number, block: Sprite, elapsed: 
     piece.sprite.y += height * 0.14 * squash;
     piece.sprite.alpha = 1 - contact;
   }
+  updatePieceShine(piece);
 }
 
 function animatePieceFlight(

@@ -270,6 +270,7 @@ function addTruck(
         if (previousElapsed < pieceLandingTime && flight.elapsed >= pieceLandingTime) pieceLanded = true;
         if (flight.elapsed === pieceFlightDuration) {
           flight.piece.sprite.removeFromParent();
+          flight.piece.shine.destroy();
           block.landed++;
         }
       }

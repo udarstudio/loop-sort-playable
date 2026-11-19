@@ -60,7 +60,8 @@ export function createConveyorCargo(onCountChange: (count: number) => void, onPi
     for (let index = 0; index < count; index++) {
       const piece = launchPiece(sprites[index], entry, index, count);
       piece.sprite.visible = false;
-      view.addChild(piece.sprite);
+      piece.shine.visible = false;
+      view.addChild(piece.sprite, piece.shine);
       belt.push({
         ...piece, elapsed: -(firstIndex + index) * pieceDepartureInterval,
         previousDistance: piece.distance, sourceDistance, canReturnToSource: false, sourceOffsetY,
