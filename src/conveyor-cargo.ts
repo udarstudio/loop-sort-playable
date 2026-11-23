@@ -1,4 +1,4 @@
-import { Container, type Sprite } from 'pixi.js';
+import { Container, Sprite, type Texture } from 'pixi.js';
 import { baseConveyorSpeed, loopLength } from './conveyor-path';
 import {
   createPieces,
@@ -51,6 +51,25 @@ export function createConveyorCargo(onCountChange: (count: number) => void, onPi
 
   function availablePieces(): number {
     return pieceCapacity - belt.length;
+  }
+
+  function preload(blocks: readonly Texture[]): void {
+    const sprites = blocks.flatMap(texture => {
+      const block = new Sprite(texture);
+      const pieces = createPieces(block);
+      block.destroy();
+      return pieces;
+    });
+    for (const [index, sprite] of sprites.entries()) {
+      const piece = launchPiece(sprite, loopLength / 2, index, sprites.length, loopLength);
+      renderPiece(piece, 1, true);
+      view.addChild(piece.sprite, piece.shine);
+      belt.push({
+        ...piece, elapsed: pieceFlightDuration, previousDistance: piece.distance,
+        sourceDistance: -1, canReturnToSource: true,
+      });
+    }
+    onCountChange(blockCount());
   }
 
   function launch(
@@ -166,7 +185,7 @@ export function createConveyorCargo(onCountChange: (count: number) => void, onPi
   }
 
   return {
-    view, unload, advance, availablePieces,
+    view, preload, unload, advance, availablePieces,
     isUnloading: (sourceDistance: number) => departures.has(sourceDistance),
   };
 }

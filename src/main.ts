@@ -161,7 +161,7 @@ async function startPlayable(mount: HTMLElement): Promise<void> {
 
   const handMode = import.meta.env.VITE_HAND_MODE;
   const updateHand = handMode === 'tutorial'
-    ? addTutorialHand(board, scene.receivers, boardWidth, boardHeight)
+    ? addTutorialHand(board, scene.tutorial, boardWidth, boardHeight)
     : undefined;
   if (handMode === 'mouse') addMouseHand(mount);
 

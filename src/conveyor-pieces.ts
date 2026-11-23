@@ -66,10 +66,11 @@ function readPose(sprite: Sprite) {
   return { x, y, width, height, rotation };
 }
 
-export function launchPiece(sprite: Sprite, entry: number, index: number, count: number): Piece {
+export function launchPiece(sprite: Sprite, entry: number, index: number, count: number, span?: number): Piece {
   const laneIndex = (index + 1) % beltLanes;
   const piecesInLane = Math.ceil((count - index % beltLanes) / beltLanes);
-  const offset = (Math.floor(index / beltLanes) - (piecesInLane - 1) / 2) * pieceSize
+  const spacing = span === undefined ? pieceSize : span / Math.ceil(count / beltLanes);
+  const offset = (Math.floor(index / beltLanes) - (piecesInLane - 1) / 2) * spacing
     + (Math.random() - 0.5) * 3;
   sprite.alpha = 1;
   return {

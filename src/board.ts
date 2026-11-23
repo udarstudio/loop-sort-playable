@@ -37,7 +37,7 @@ function createTruckLoads(easyStart: boolean): BlockColor[][] {
     if (Math.random() < 0.5) matches.reverse();
 
     const [firstMatch, secondMatch] = matches;
-    return shuffle([
+    return [
       [
         ...Array<BlockColor>(4).fill(blocker),
         firstMatch, firstMatch,
@@ -45,9 +45,8 @@ function createTruckLoads(easyStart: boolean): BlockColor[][] {
         ...Array<BlockColor>(3).fill(firstMatch),
         ...Array<BlockColor>(5).fill(secondMatch),
       ],
-      [blocker, ...Array<BlockColor>(truckCapacity - 1).fill(firstMatch)],
+      [blocker, firstMatch],
       [
-        firstMatch,
         blocker, blocker,
         ...Array<BlockColor>(3).fill(secondMatch),
         ...Array<BlockColor>(7).fill(firstMatch),
@@ -70,7 +69,7 @@ function createTruckLoads(easyStart: boolean): BlockColor[][] {
         ...Array<BlockColor>(3).fill(secondMatch),
         ...Array<BlockColor>(10).fill(blocker),
       ],
-    ]);
+    ];
   }
 
   const blocks = shuffle(blockColors.flatMap((color) => Array<BlockColor>(2 * truckCapacity).fill(color)));
@@ -110,7 +109,7 @@ type PartialBlock = {
 
 function addTruck(
   board: Container, left: number, blocks: readonly BlockColor[], art: TruckArt,
-  conveyor: ConveyorInput, events: TruckEvents,
+  conveyor: ConveyorInput, events: TruckEvents, canTap: () => boolean,
 ) {
   const truck = board.addChild(new Container());
   let unloadHopElapsed = unloadHopDuration;
@@ -170,10 +169,14 @@ function addTruck(
   }
   updateCargoAppearance();
 
+  function hasMixedCargo(): boolean {
+    // Incoming pieces always match the exposed cargo color.
+    const texture = cargo[0]?.texture;
+    return cargo.some((block) => block.texture !== texture);
+  }
+
   function isComplete(): boolean {
-    if (cargo.length !== truckCapacity) return false;
-    const { texture } = cargo[0];
-    return cargo.every((block) => block.texture === texture);
+    return cargo.length === truckCapacity && !hasMixedCargo();
   }
 
   function markComplete(): void {
@@ -189,7 +192,7 @@ function addTruck(
   }
 
   function canUnload(): boolean {
-    return body.eventMode === 'static' && !conveyor.isUnloading(distance)
+    return canTap() && body.eventMode === 'static' && !conveyor.isUnloading(distance)
       && !loading.some((block) => block.landed < block.pieces.length);
   }
 
@@ -295,7 +298,7 @@ function addTruck(
   }
 
   return {
-    distance, receive, advance, isComplete,
+    distance, receive, advance, isComplete, hasMixedCargo,
     isEmpty: () => cargo.length === 0 && loading.length === 0,
     hint() {
       const top = loading.at(-1)?.sprite ?? cargo[0];
@@ -306,20 +309,43 @@ function addTruck(
 }
 
 export function createBoard(
-  art: TruckArt, conveyor: ConveyorInput, events: TruckEvents,
+  art: TruckArt, conveyor: ReturnType<typeof createConveyorCargo>, events: TruckEvents,
   { easyStart }: { easyStart: boolean },
 ) {
   const board = new Container();
   const loads = createTruckLoads(easyStart);
+  let openingLoad = easyStart ? loads[1] : undefined;
+  const laneLoads = easyStart ? shuffle([...loads]) : loads;
+  if (openingLoad) {
+    const match = art.blocks[openingLoad[1]];
+    conveyor.preload(Array.from({ length: truckCapacity - 1 }, () => match));
+  }
+
   const belt = board.addChild(createConveyor());
   const { minX: firstTruckLeft, width: beltWidth } = belt.getLocalBounds();
   const truckSpacing = (beltWidth - art.body.width) / (loads.length - 1);
 
-  const trucks = loads.map((blocks, lane) => addTruck(board, firstTruckLeft + lane * truckSpacing, blocks, art, conveyor, events));
+  const truckEvents = {
+    ...events,
+    onUnload() {
+      openingLoad = undefined;
+      events.onUnload();
+    },
+  };
+  // Reserve the last slot for the blocker so the first move always opens the belt.
+  const trucks = laneLoads.map((blocks, lane) => addTruck(
+    board, firstTruckLeft + lane * truckSpacing, blocks, art, conveyor, truckEvents,
+    () => !openingLoad || openingLoad === blocks,
+  ));
 
   return {
     view: board,
     receivers: trucks,
+    tutorial: {
+      // Start with the opening truck, then the three-layer truck. Follow the loads through the shuffle.
+      trucks: easyStart ? [1, 4, 5, 3, 0, 2].map(index => trucks[laneLoads.indexOf(loads[index])]) : trucks,
+      openingTapped: easyStart ? () => openingLoad === undefined : undefined,
+    },
     advance(deltaMS: number) {
       let pieceLanded = false;
       for (const truck of trucks) {

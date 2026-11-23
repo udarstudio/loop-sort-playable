@@ -6,7 +6,17 @@ type TruckHint = {
   hint(): { x: number; y: number } | undefined;
   isComplete(): boolean;
   isEmpty(): boolean;
+  hasMixedCargo(): boolean;
 };
+
+type Tutorial = {
+  trucks: readonly TruckHint[];
+  openingTapped?: () => boolean;
+};
+
+function hasFinished(truck: TruckHint): boolean {
+  return truck.isEmpty() || truck.isComplete();
+}
 
 function createHand(className: string): HTMLImageElement {
   const hand = document.createElement('img');
@@ -17,12 +27,13 @@ function createHand(className: string): HTMLImageElement {
   return hand;
 }
 
-export function addTutorialHand(board: HTMLElement, trucks: readonly TruckHint[], width: number, height: number) {
+export function addTutorialHand(board: HTMLElement, { trucks, openingTapped }: Tutorial, width: number, height: number) {
   const hand = createHand('tutorial-hand');
   board.appendChild(hand);
   const input = new AbortController();
   const listenerOptions = { signal: input.signal };
   let activeTruck: TruckHint | undefined;
+  let stage = 0;
   let showAfter = 0;
   const pressedPointers = new Set<number>();
 
@@ -48,7 +59,13 @@ export function addTutorialHand(board: HTMLElement, trucks: readonly TruckHint[]
 
   function update(): void {
     if (input.signal.aborted) return;
-    if (activeTruck && (activeTruck.isComplete() || activeTruck.isEmpty())) {
+    if (openingTapped) {
+      if (stage === 0 && openingTapped()) stage++;
+      while (stage > 0 && stage < trucks.length && !trucks[stage].hasMixedCargo()) stage++;
+      activeTruck = trucks[stage];
+    }
+    const finished = openingTapped ? stage === trucks.length : activeTruck && hasFinished(activeTruck);
+    if (finished) {
       hand.remove();
       input.abort();
       return;
