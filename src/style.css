@@ -132,7 +132,8 @@ main {
   transition: opacity 400ms linear;
 }
 
-.playable-won .playable-hand {
+.playable-won .playable-hand,
+.playable-jammed .playable-hand {
   visibility: hidden;
 }
 
@@ -183,6 +184,53 @@ main {
   background: url('./assets/cube-shape.png') center / contain no-repeat;
 }
 
+.playable-lost .playable-canvas,
+.playable-lost .board,
+.playable-lost .playable-logo {
+  filter: blur(6px);
+  transition: filter 240ms ease-out;
+}
+
+.playable-lost > .download-cta {
+  visibility: hidden;
+}
+
+.game-over {
+  position: absolute;
+  inset: 0;
+  z-index: 4;
+  display: grid;
+  place-items: center;
+  padding: 16px;
+  background: #160f28a6;
+  animation: game-over-in 240ms ease-out;
+}
+
+.game-over[hidden] {
+  display: none;
+}
+
+.game-over .download-cta {
+  position: static;
+  translate: none;
+  width: min(64vw, 260px);
+  height: auto;
+  aspect-ratio: 398 / 135;
+  border-radius: 10% / 30%;
+  cursor: pointer;
+}
+
+@keyframes game-over-in {
+  from { opacity: 0; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .game-over { animation: none; }
+  .playable-lost .playable-canvas,
+  .playable-lost .board,
+  .playable-lost .playable-logo { transition: none; }
+}
+
 .playable-hand {
   z-index: 3;
   width: calc(var(--board-width) * 0.16);
@@ -222,7 +270,7 @@ main {
   .mouse-hand { transition: none; }
 }
 
-.show-mouse-hand,
-.show-mouse-hand * {
+.show-mouse-hand:not(.playable-jammed),
+.show-mouse-hand:not(.playable-jammed) * {
   cursor: none !important;
 }

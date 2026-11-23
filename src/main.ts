@@ -18,6 +18,8 @@ const maxRenderScale = 4;
 const maxRenderPixels = 3_000_000;
 const backgroundEdge = '#aa9bcb';
 const winHoldDuration = 1000;
+const jamHoldDuration = 2000;
+const jamPulseDuration = 650;
 const musicUrl = import.meta.env.VITE_PLAYABLE_VARIANT === 'alternative' ? alternativeMusicUrl : classicMusicUrl;
 
 function addBackgroundMusic(canvas: HTMLCanvasElement): () => void {
@@ -158,6 +160,10 @@ async function startPlayable(mount: HTMLElement): Promise<void> {
   mount.prepend(app.canvas);
   board.appendChild(capacity);
   const stopBackgroundMusic = addBackgroundMusic(app.canvas);
+  const gameOver = mount.querySelector<HTMLElement>('.game-over')!;
+  const retry = gameOver.querySelector<HTMLButtonElement>('button')!;
+  retry.addEventListener('click', () => window.location.reload());
+  let jammedFor = 0;
 
   const handMode = import.meta.env.VITE_HAND_MODE;
   const updateHand = handMode === 'tutorial'
@@ -177,7 +183,7 @@ async function startPlayable(mount: HTMLElement): Promise<void> {
   }));
   background.position.copyFrom(conveyorCenter);
   background.eventMode = 'none';
-  boardFrame.addChild(background, scene.view, flow.view, cargo.view);
+  boardFrame.addChild(background, scene.view, flow.view, cargo.view, scene.jamGlow);
   if (confetti) boardFrame.addChild(confetti.view);
 
   function showWin(): void {
@@ -206,10 +212,38 @@ async function startPlayable(mount: HTMLElement): Promise<void> {
     }
     scene.advance(deltaMS);
     if (winHoldRemaining > 0) return;
-    const distance = cargo.advance(deltaMS, scene.receivers);
+    let beltDeltaMS = deltaMS;
+    if (jammedFor > 0) {
+      const brakeTime = Math.min(deltaMS, jamHoldDuration - jammedFor);
+      const averageSpeed = 1 - (jammedFor + brakeTime / 2) / jamHoldDuration;
+      beltDeltaMS = brakeTime * averageSpeed;
+    }
+    const distance = cargo.advance(beltDeltaMS, scene.receivers);
     flow.advance(distance);
     confetti?.advance(deltaMS);
     updateHand?.();
+
+    if (cargo.isJammed(scene.receivers)) {
+      if (jammedFor === 0) {
+        mount.classList.add('playable-jammed');
+        scene.jamGlow.visible = true;
+      }
+      jammedFor += deltaMS;
+      scene.jamGlow.alpha = animate ? 0.6 + 0.4 * Math.cos(jammedFor * 2 * Math.PI / jamPulseDuration) : 0.8;
+      if (jammedFor >= jamHoldDuration) {
+        boardFrame.eventMode = 'none';
+        stopBackgroundMusic();
+        mount.classList.add('playable-lost');
+        gameOver.hidden = false;
+        retry.focus();
+        app.render();
+        app.stop();
+      }
+    } else if (jammedFor > 0) {
+      jammedFor = 0;
+      mount.classList.remove('playable-jammed');
+      scene.jamGlow.visible = false;
+    }
   });
 
   let renderedLayout = initialLayout;
@@ -230,7 +264,7 @@ async function startPlayable(mount: HTMLElement): Promise<void> {
     background.scale.set(radius / layout.scale);
     winScreen.resize(layout.width, layout.height);
     renderedLayout = layout;
-    if (winScreen.view.visible) app.render();
+    if (winScreen.view.visible || !gameOver.hidden) app.render();
   }
 
   const resizeObserver = new ResizeObserver(resizeCanvas);

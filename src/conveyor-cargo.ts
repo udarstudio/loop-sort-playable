@@ -22,6 +22,8 @@ const loadingReach = 6;
 export type ConveyorReceiver = {
   distance: number;
   receive(piece: Piece): boolean;
+  canReceiveColor(texture: Texture): boolean;
+  hasPartialCargo(): boolean;
 };
 
 type BeltPiece = Piece & {
@@ -51,6 +53,14 @@ export function createConveyorCargo(onCountChange: (count: number) => void, onPi
 
   function availablePieces(): number {
     return pieceCapacity - belt.length;
+  }
+
+  function isJammed(receivers: readonly ConveyorReceiver[]): boolean {
+    const space = availablePieces();
+    if (space >= piecesPerBlock || departures.size > 0) return false;
+    if (space > 0 && receivers.some((truck) => truck.hasPartialCargo())) return false;
+    // A matching cube can still reach its truck later, even if it just passed it.
+    return !belt.some((piece) => receivers.some((truck) => truck.canReceiveColor(piece.blockTexture)));
   }
 
   function preload(blocks: readonly Texture[]): void {
@@ -185,7 +195,7 @@ export function createConveyorCargo(onCountChange: (count: number) => void, onPi
   }
 
   return {
-    view, preload, unload, advance, availablePieces,
+    view, preload, unload, advance, availablePieces, isJammed,
     isUnloading: (sourceDistance: number) => departures.has(sourceDistance),
   };
 }
