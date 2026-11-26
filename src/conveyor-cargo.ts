@@ -38,7 +38,8 @@ type Departure = {
   count: number;
   inFlight: number;
   remaining: number;
-  onProgress?: (departed: number, finished: boolean) => void;
+  started: number;
+  onProgress?: (departed: number, finished: boolean, started: number) => void;
 };
 
 export function createConveyorCargo(onCountChange: (count: number) => void, onPieceDeparture: () => void) {
@@ -109,7 +110,7 @@ export function createConveyorCargo(onCountChange: (count: number) => void, onPi
     const count = addedPieces + addedBlocks * piecesPerBlock;
     if (count === 0) return { pieces: 0, blocks: 0 };
 
-    departures.set(sourceDistance, { count, inFlight: count, remaining: count, onProgress });
+    departures.set(sourceDistance, { count, inFlight: count, remaining: count, started: 0, onProgress });
     launch(pieces, addedPieces, sourceDistance, sourceDistance, 0, sourceOffset);
     for (let index = 0; index < addedBlocks; index++) {
       const block = blocks[index];
@@ -155,6 +156,7 @@ export function createConveyorCargo(onCountChange: (count: number) => void, onPi
 
         piece.sprite.alpha = progress;
         if (waiting) {
+          departure.started++;
           piece.sprite.visible = true;
           const offset = piece.sourceOffset!;
           piece.from.x += offset.x;
@@ -169,7 +171,7 @@ export function createConveyorCargo(onCountChange: (count: number) => void, onPi
     }
     for (const [source, departure] of departures) {
       const finished = departure.remaining === 0;
-      departure.onProgress?.(departure.count - departure.remaining, finished);
+      departure.onProgress?.(departure.count - departure.remaining, finished, departure.started);
       if (finished) departure.onProgress = undefined;
       if (departure.inFlight === 0) departures.delete(source);
     }

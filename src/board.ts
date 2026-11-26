@@ -21,9 +21,9 @@ export const conveyorCenter = {
 const truckCapacity = 16;
 const truckTop = 302;
 const unloadHopDuration = 180;
-const landingBounceDuration = 500;
-const landingBouncePerPiece = 1;
-const landingBounceMaxDistance = 10;
+const bounceDuration = 500;
+const bouncePerPiece = 1;
+const bounceMaxDistance = 10;
 const sideNudgeDuration = 50;
 const restingOffset = { x: 0, y: 0 };
 const completionCheckColors = { pink: 0x7b1f53, orange: 0x834018, white: 0x635773 };
@@ -148,8 +148,9 @@ function addTruck(
 ) {
   const truck = board.addChild(new Container());
   let unloadHopElapsed = unloadHopDuration;
-  let landingBounceRemaining = 0;
-  let landingBouncePeak = 0;
+  let bounceRemaining = 0;
+  let bouncePeak = 0;
+  let recoil = 0;
   let sideNudgeTimeout = 0;
 
   const body = new Sprite(art.body);
@@ -251,10 +252,23 @@ function addTruck(
     const { texture } = top;
     const partial = loading.flatMap((block) => block.pieces.map(({ piece }) => piece.sprite)).reverse();
     const initialPieces = topRunLength * piecesPerBlock + partial.length;
-    const moved = conveyor.unload(partial, cargo.slice(0, topRunLength), distance, truck.position, (departed, finished) => {
-      if (finished) updateCargoAppearance();
-      else fill.update(texture, initialPieces - departed);
-    });
+    let started = 0;
+    const moved = conveyor.unload(
+      partial, cargo.slice(0, topRunLength), distance, truck.position,
+      (departed, finished, piecesStarted) => {
+        if (animate && piecesStarted > started) {
+          let sideHits = 0;
+          // Unloading reverses the stack order, including any partial top block.
+          for (let index = started; index < piecesStarted; index++) {
+            sideHits += stackSide(initialPieces - 1 - index);
+          }
+          wobble(started - piecesStarted, -sideHits);
+          started = piecesStarted;
+        }
+        if (finished) updateCargoAppearance();
+        else fill.update(texture, initialPieces - departed);
+      },
+    );
 
     let remaining = moved.pieces;
     while (remaining > 0) {
@@ -303,16 +317,27 @@ function addTruck(
     return true;
   }
 
+  function wobble(pieces: number, sideHits: number): void {
+    const nextRecoil = recoil + pieces * bouncePerPiece;
+    bouncePeak = Math.max(-bounceMaxDistance, Math.min(bounceMaxDistance, nextRecoil));
+    bounceRemaining = bounceDuration;
+    if (sideHits === 0) return;
+
+    truck.x = 0.5 * Math.sign(sideHits);
+    window.clearTimeout(sideNudgeTimeout);
+    sideNudgeTimeout = window.setTimeout(() => {
+      truck.x = 0;
+    }, sideNudgeDuration);
+  }
+
   function advance(deltaMS: number): boolean {
     const hopping = unloadHopElapsed < unloadHopDuration;
     if (hopping) unloadHopElapsed = Math.min(unloadHopDuration, unloadHopElapsed + deltaMS);
-    let recoil = 0;
-    if (hopping || landingBouncePeak > 0) {
+    if (hopping || bounceRemaining > 0 || recoil !== 0) {
       const hop = hopping ? 5 * Math.sin(Math.PI * unloadHopElapsed / unloadHopDuration) ** 2 : 0;
-      recoil = landingBouncePeak * (landingBounceRemaining / landingBounceDuration) ** 2;
+      recoil = bouncePeak * (bounceRemaining / bounceDuration) ** 2;
       truck.y = recoil - hop;
-      if (landingBounceRemaining === 0) landingBouncePeak = 0;
-      else landingBounceRemaining = Math.max(0, landingBounceRemaining - deltaMS);
+      bounceRemaining = Math.max(0, bounceRemaining - deltaMS);
     }
 
     let piecesLanded = 0;
@@ -335,17 +360,7 @@ function addTruck(
         }
       }
     }
-    if (animate && piecesLanded > 0) {
-      landingBouncePeak = Math.min(landingBounceMaxDistance, recoil + piecesLanded * landingBouncePerPiece);
-      landingBounceRemaining = landingBounceDuration;
-    }
-    if (sideHits !== 0) {
-      truck.x = 0.5 * Math.sign(sideHits);
-      window.clearTimeout(sideNudgeTimeout);
-      sideNudgeTimeout = window.setTimeout(() => {
-        truck.x = 0;
-      }, sideNudgeDuration);
-    }
+    if (animate && piecesLanded > 0) wobble(piecesLanded, sideHits);
 
     const previousCargoLength = cargo.length;
     while (loading[0]?.landed === piecesPerBlock) {
