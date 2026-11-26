@@ -1,6 +1,7 @@
 import handUrl from './assets/tutorial-hand.png';
 
 const idleDelay = 3000;
+const dismissDuration = 160;
 
 type TruckHint = {
   hint(): { x: number; y: number } | undefined;
@@ -35,17 +36,40 @@ export function addTutorialHand(board: HTMLElement, { trucks, openingTapped }: T
   const listenerOptions = { signal: input.signal };
   let activeTruck: TruckHint | undefined;
   let hintedTruck: TruckHint | undefined;
+  let dismissal: Animation | undefined;
   let stage = 0;
   let showAfter = 0;
   const pressedPointers = new Set<number>();
+  const reducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)');
 
   function clearHint(): void {
     hintedTruck?.updateHint();
     hintedTruck = undefined;
   }
 
+  function dismissHand(): void {
+    if (hand.hidden || dismissal) return;
+    if (reducedMotion.matches) {
+      hand.hidden = true;
+      return;
+    }
+
+    const { opacity, transform, translate } = getComputedStyle(hand);
+    const smallerTransform = transform === 'none' ? 'scale(0.5)' : `${transform} scale(0.5)`;
+    const animation = hand.animate([
+      { opacity, transform, translate },
+      { opacity: 0, transform: smallerTransform, translate },
+    ], { duration: dismissDuration, easing: 'ease-out', fill: 'forwards' });
+    dismissal = animation;
+    animation.onfinish = () => {
+      hand.hidden = true;
+      animation.cancel();
+      dismissal = undefined;
+    };
+  }
+
   function reset(): void {
-    hand.hidden = true;
+    dismissHand();
     clearHint();
     showAfter = performance.now() + idleDelay;
   }
@@ -66,7 +90,7 @@ export function addTutorialHand(board: HTMLElement, { trucks, openingTapped }: T
   }, listenerOptions);
 
   function update(deltaMS = 0): void {
-    if (input.signal.aborted) return;
+    if (input.signal.aborted || dismissal) return;
     if (openingTapped) {
       if (stage === 0 && openingTapped()) stage++;
       while (stage > 0 && stage < trucks.length && !trucks[stage].hasMixedCargo()) stage++;

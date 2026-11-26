@@ -361,19 +361,29 @@ main {
   z-index: 3;
   width: calc(var(--board-width) * 0.16);
   translate: -8% -8%;
-  transform-origin: 8% 8%;
+  transform-origin: 58% 57%;
   pointer-events: none;
   filter: drop-shadow(1px 3px 3px #17122eaa);
 }
 
 .tutorial-hand {
   position: absolute;
-  animation: tutorial-tap 1.2s ease-in-out infinite;
+  animation:
+    tutorial-hand-in 360ms ease-out backwards,
+    tutorial-tap 1.2s ease-in-out 360ms infinite backwards;
+}
+
+@keyframes tutorial-hand-in {
+  from {
+    opacity: 0;
+    translate: -8% 14%;
+  }
 }
 
 @keyframes tutorial-tap {
-  0%, 100% { transform: translate(0, 0); }
-  50% { transform: translate(5%, 5%); }
+  0%, 18%, 78%, 100% { transform: translate(18%, 27%); }
+  34% { transform: translate(0, 0); }
+  48%, 54% { transform: translate(0, 0) rotate(-20deg) scale(0.86); }
 }
 
 @media (prefers-reduced-motion: reduce) {
@@ -383,8 +393,7 @@ main {
 .mouse-hand {
   --turn: 0deg;
   position: fixed;
-  /* Offset from the fingertip to the palm and back to keep the palm in place. */
-  transform: translate(50%, 49%) rotate(var(--turn)) translate(-50%, -49%);
+  transform: rotate(var(--turn));
   transition: transform 120ms ease-out;
 }
 
