@@ -21,6 +21,8 @@ export const conveyorCenter = {
 const truckCapacity = 16;
 const truckTop = 302;
 const unloadHopDuration = 180;
+const landingBounceDuration = 500;
+const landingBounceDistance = 10;
 const completionCheckColors = { pink: 0x7b1f53, orange: 0x834018, white: 0x635773 };
 
 function shuffle<T>(items: T[]): T[] {
@@ -139,10 +141,11 @@ type PartialBlock = {
 
 function addTruck(
   board: Container, left: number, blocks: readonly BlockColor[], art: TruckArt,
-  conveyor: ConveyorInput, events: TruckEvents, canTap: () => boolean,
+  conveyor: ConveyorInput, events: TruckEvents, canTap: () => boolean, animate: boolean,
 ) {
   const truck = board.addChild(new Container());
   let unloadHopElapsed = unloadHopDuration;
+  let landingBounceRemaining = 0;
 
   const body = new Sprite(art.body);
   body.position.set(left, truckTop);
@@ -300,19 +303,23 @@ function addTruck(
   }
 
   function advance(deltaMS: number): boolean {
-    if (unloadHopElapsed < unloadHopDuration) {
-      unloadHopElapsed = Math.min(unloadHopDuration, unloadHopElapsed + deltaMS);
-      const progress = unloadHopElapsed / unloadHopDuration;
-      truck.y = centerY - 5 * Math.sin(Math.PI * progress) ** 2;
+    const hopping = unloadHopElapsed < unloadHopDuration;
+    if (hopping) unloadHopElapsed = Math.min(unloadHopDuration, unloadHopElapsed + deltaMS);
+    if (hopping || landingBounceRemaining > 0) {
+      const hop = hopping ? 5 * Math.sin(Math.PI * unloadHopElapsed / unloadHopDuration) ** 2 : 0;
+      landingBounceRemaining = Math.max(0, landingBounceRemaining - deltaMS);
+      const recoil = landingBounceDistance * (landingBounceRemaining / landingBounceDuration) ** 2;
+      truck.y = centerY - hop + recoil;
     }
 
+    const truckOffsetY = sourceOffsetY();
     let pieceLanded = false;
     for (const block of loading) {
       for (let index = block.landed; index < block.pieces.length; index++) {
         const flight = block.pieces[index];
         const previousElapsed = flight.elapsed;
         flight.elapsed = Math.min(pieceFlightDuration, flight.elapsed + deltaMS);
-        stackPiece(flight.piece, index, block.sprite, flight.elapsed);
+        stackPiece(flight.piece, index, block.sprite, flight.elapsed, truckOffsetY);
         if (previousElapsed < pieceLandingTime && flight.elapsed >= pieceLandingTime) pieceLanded = true;
         if (flight.elapsed === pieceFlightDuration) {
           flight.piece.sprite.removeFromParent();
@@ -321,6 +328,7 @@ function addTruck(
         }
       }
     }
+    if (animate && pieceLanded) landingBounceRemaining = landingBounceDuration;
 
     const previousCargoLength = cargo.length;
     while (loading[0]?.landed === piecesPerBlock) {
@@ -353,7 +361,7 @@ function addTruck(
 }
 
 export function createBoard(
-  art: TruckArt, conveyor: ReturnType<typeof createConveyorCargo>, events: TruckEvents, variant: PlayableVariant,
+  art: TruckArt, conveyor: ReturnType<typeof createConveyorCargo>, events: TruckEvents, variant: PlayableVariant, animate: boolean,
 ) {
   const board = new Container();
   const fourTapWin = variant === 'win';
@@ -386,7 +394,7 @@ export function createBoard(
   };
   const trucks: ReturnType<typeof addTruck>[] = laneLoads.map((blocks, lane) => addTruck(
     board, firstTruckLeft + lane * truckSpacing, blocks, art, conveyor, truckEvents,
-    () => fourTapWin || !openingLoad || openingLoad === blocks,
+    () => fourTapWin || !openingLoad || openingLoad === blocks, animate,
   ));
   const hintOrder = fourTapWin ? [openingLane, ...pinkLanes] : [1, 4, 5, 3, 0, 2];
 

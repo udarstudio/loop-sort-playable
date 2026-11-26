@@ -193,7 +193,7 @@ async function startPlayable(mount: HTMLElement): Promise<void> {
       praise.addEventListener('animationend', () => praise.remove(), { once: true });
       board.appendChild(praise);
     },
-  }, variant);
+  }, variant, animate);
   app.canvas.className = 'playable-canvas';
   mount.prepend(app.canvas);
   conveyorHud.prepend(capacity);
@@ -247,6 +247,7 @@ async function startPlayable(mount: HTMLElement): Promise<void> {
       return;
     }
     if (winHoldRemaining > 0) {
+      scene.advance(deltaMS);
       confetti?.advance(deltaMS);
       winHoldRemaining -= deltaMS;
       if (winHoldRemaining <= 0) showWin();

@@ -1,4 +1,4 @@
-import { Container, Graphics, Sprite, type Texture } from 'pixi.js';
+import { Container, Sprite, Texture } from 'pixi.js';
 import { loopLength, positionOnConveyor } from './conveyor-path';
 import { createStretchableBlock, getBaseBlockTexture, getLoosePieceTexture, getPieceShineTexture } from './truck-art';
 
@@ -168,36 +168,36 @@ export function createStackFill(texture: Texture, blockHeight: number) {
   const rowHeight = blockHeight / stackRows;
 
   function addFace() {
-    const image = createStretchableBlock(texture);
+    const image = createStretchableBlock(new Texture({ source: texture.source, frame: texture.frame, dynamic: true }));
     image.anchor.y = 1;
     image.scale.y = blockHeight / texture.height;
-    const mask = new Graphics({ visible: false }).rect(0, -1, 1, 1).fill(0xffffff);
-    view.addChild(image, mask);
-    return { image, mask };
+    return view.addChild(image);
   }
 
   const rear = addFace();
-  rear.image.tint = 0xe3dbee;
+  rear.tint = 0xe3dbee;
   const frontRight = addFace();
   const frontLeft = addFace();
 
   function showFace(
-    { image, mask }: ReturnType<typeof addFace>, texture: Texture, height: number, left: number, right: number,
+    image: ReturnType<typeof addFace>, texture: Texture, height: number, left: number, right: number,
   ): void {
     image.visible = height > 0 && left < right;
     if (!image.visible) return;
 
-    if (image.texture !== texture) image.texture = texture;
-    const unscaledHeight = height / image.scale.y;
-    if (image.height !== unscaledHeight) image.height = unscaledHeight;
-
-    const cropped = left > 0 || right < texture.width;
-    image.mask = cropped ? mask : null;
-    mask.visible = cropped;
-    if (cropped) {
-      mask.x = left;
-      mask.scale.set(right - left, height);
+    // Clip the atlas frame instead of masking the moving stack in the renderer.
+    const { frame } = image.texture;
+    const width = right - left;
+    const atlasX = texture.frame.x + left;
+    if (frame.x !== atlasX || frame.y !== texture.frame.y || frame.width !== width) {
+      frame.x = atlasX;
+      frame.y = texture.frame.y;
+      frame.width = width;
+      image.texture.update();
     }
+    image.x = left;
+    const unscaledHeight = height / image.scale.y;
+    if (image.width !== width || image.height !== unscaledHeight) image.setSize(width, unscaledHeight);
   }
 
   function update(texture: Texture, pieces: number): void {
@@ -218,10 +218,10 @@ export function createStackFill(texture: Texture, blockHeight: number) {
   return { view, update };
 }
 
-export function stackPiece(piece: Piece, index: number, block: Sprite, elapsed: number): void {
+export function stackPiece(piece: Piece, index: number, block: Sprite, elapsed: number, truckOffsetY: number): void {
   const { x, y, width, height } = stackCell(block, index);
   const travel = Math.min(1, elapsed / pieceLandingTime);
-  animatePieceFlight(piece, x, y, width, height, 0, travel * travel * (3 - 2 * travel));
+  animatePieceFlight(piece, x, y + truckOffsetY, width, height, 0, travel * travel * (3 - 2 * travel));
   const contact = landingProgress(elapsed);
   if (contact > 0) {
     const squash = Math.sin(Math.PI * contact);
