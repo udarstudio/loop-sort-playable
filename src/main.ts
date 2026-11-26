@@ -268,7 +268,7 @@ async function startPlayable(mount: HTMLElement): Promise<void> {
     const distance = cargo.advance(beltDeltaMS, scene.receivers);
     flow.advance(distance);
     confetti?.advance(deltaMS);
-    updateHand?.();
+    updateHand?.(deltaMS, animate);
 
     if (cargo.isJammed(scene.receivers)) {
       if (jammedFor === 0) {

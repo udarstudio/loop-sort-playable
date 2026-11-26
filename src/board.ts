@@ -25,6 +25,8 @@ const bounceDuration = 500;
 const bouncePerPiece = 1;
 const bounceMaxDistance = 10;
 const sideNudgeDuration = 50;
+const hintPulseDuration = 300;
+const hintPulseStagger = 75;
 const restingOffset = { x: 0, y: 0 };
 const completionCheckColors = { pink: 0x7b1f53, orange: 0x834018, white: 0x635773 };
 
@@ -177,6 +179,50 @@ function addTruck(
   const fill = createStackFill(art.blocks[blocks[0]], blockHeight);
   cargoView.addChild(fill.view);
   let topRunLength = 0;
+  let hintWave: Container<Container> | undefined;
+  let hintWaveElapsed = 0;
+
+  function* cargoRuns() {
+    for (let start = 0; start < cargo.length;) {
+      const block = cargo[start];
+      let end = start + 1;
+      while (end < cargo.length && cargo[end].texture === block.texture) end++;
+      yield { block, start, length: end - start };
+      start = end;
+    }
+  }
+
+  function updateHintWave(deltaMS?: number): void {
+    if (deltaMS === undefined) {
+      hintWave?.destroy({ children: true });
+      hintWave = undefined;
+      hintWaveElapsed = 0;
+      return;
+    }
+
+    if (!hintWave) {
+      hintWave = truck.addChild(new Container<Container>({ eventMode: 'none' }));
+      for (const { block, length } of cargoRuns()) {
+        const pulse = hintWave.addChild(new Container());
+        const halfWidth = block.width / 2;
+        const run = pulse.addChild(createCargoRun(block, length));
+        pulse.position.set(block.x + halfWidth, block.y);
+        run.position.set(-halfWidth, 0);
+      }
+    }
+
+    const pulses = hintWave.children;
+    const turnAt = (pulses.length - 1) * hintPulseStagger + hintPulseDuration / 2;
+    const roundTrip = 2 * turnAt;
+    hintWaveElapsed = (hintWaveElapsed + deltaMS) % roundTrip;
+    const waveTime = Math.min(hintWaveElapsed, roundTrip - hintWaveElapsed);
+    for (const [index, pulse] of pulses.entries()) {
+      const delay = (pulses.length - 1 - index) * hintPulseStagger;
+      const progress = (waveTime - delay) / hintPulseDuration;
+      pulse.visible = progress > 0 && progress < 1;
+      if (pulse.visible) pulse.scale.x = 1 + 0.24 * Math.sin(Math.PI * progress);
+    }
+  }
 
   function updateStackFill(): void {
     const top = cargo[0] ?? loading[0]?.sprite;
@@ -192,15 +238,12 @@ function addTruck(
   }
 
   function updateCargoAppearance(): void {
+    if (hintWave) updateHintWave();
     while (cargoView.children.length > 1) cargoView.removeChildAt(1).destroy();
     topRunLength = 0;
-    for (let start = 0; start < cargo.length;) {
-      const { texture } = cargo[start];
-      let end = start + 1;
-      while (end < cargo.length && cargo[end].texture === texture) end++;
-      if (start === 0) topRunLength = end;
-      else cargoView.addChild(createCargoRun(cargo[start], end - start));
-      start = end;
+    for (const { block, start, length } of cargoRuns()) {
+      if (start === 0) topRunLength = length;
+      else cargoView.addChild(createCargoRun(block, length));
     }
     updateStackFill();
   }
@@ -381,7 +424,7 @@ function addTruck(
   }
 
   return {
-    distance, receive, canReceiveColor, hasPartialCargo, advance, isComplete, hasMixedCargo,
+    distance, receive, canReceiveColor, hasPartialCargo, advance, isComplete, hasMixedCargo, updateHintWave,
     hasCargoInFlight,
     isEmpty: () => cargo.length === 0 && loading.length === 0,
     hint() {
