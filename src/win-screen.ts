@@ -11,7 +11,6 @@ export async function createWinScreen(animate: boolean) {
   const view = new Container({ visible: false, eventMode: 'none' });
   const backdrop = view.addChild(new Sprite(Texture.WHITE));
   backdrop.tint = 0x000000;
-  backdrop.alpha = animate ? 0 : 1;
   const confetti = animate ? createWinConfetti() : undefined;
   if (confetti) view.addChild(confetti.view);
   const logo = view.addChild(new Container({ visible: false }));
@@ -20,31 +19,34 @@ export async function createWinScreen(animate: boolean) {
     const texture = new Texture({ source, frame: new Rectangle(x, y, width, height) });
     return logo.addChild(new Sprite({ texture, anchor: 0.5 }));
   });
+  // Use the settled artwork so the title stays centered while the logo animates in.
+  const finalPose = logoData.frames.at(-1)!;
+  const logoBottom = Math.max(...logoData.regions.map(([, , width, height], index) => {
+    const [, b, , d, , y, alpha] = finalPose[index];
+    if (alpha === 0) return -Infinity;
+    return y + (Math.abs(b) * width + Math.abs(d) * height) / 2;
+  }));
   const matrix = new Matrix();
-  const fadeDuration = animate ? 400 : 0;
   let elapsed = 0;
 
-  function resize(width: number, height: number): void {
+  function resize(width: number, height: number): number {
     backdrop.setSize(width, height);
     confetti?.resize(width, height);
     logo.position.set(width / 2, height * 0.39);
     const logoWidth = Math.min(width * 0.78, height * 0.77, 520) * 0.9;
     logo.scale.set(logoWidth / logoData.width);
+    return logo.y + logoBottom * logo.scale.y;
   }
 
   function advance(deltaMS: number, playSound: () => void): boolean {
-    const previousTime = elapsed - fadeDuration;
+    const previousTime = elapsed;
     elapsed += deltaMS;
-    const time = elapsed - fadeDuration;
-    if (animate) backdrop.alpha = Math.min(1, elapsed / fadeDuration);
-    if (time < 0) return true;
-
     if (!logo.visible) {
       logo.visible = true;
       playSound();
     }
     const frames = logoData.frames;
-    const frame = (animate ? Math.min(1, time / logoData.duration) : 1) * (frames.length - 1);
+    const frame = (animate ? Math.min(1, elapsed / logoData.duration) : 1) * (frames.length - 1);
     const index = Math.floor(frame);
     const progress = frame - index;
     const next = frames[Math.min(index + 1, frames.length - 1)];
@@ -54,11 +56,11 @@ export async function createWinScreen(animate: boolean) {
       sprite.setFromMatrix(matrix.set(a, b, c, d, x, y));
       sprite.alpha = alpha;
     }
-    if (confetti && previousTime < logoData.firework && time >= logoData.firework) {
+    if (confetti && previousTime < logoData.firework && elapsed >= logoData.firework) {
       confetti.burst();
     }
-    confetti?.advance(Math.min(deltaMS, Math.max(0, time - logoData.firework)));
-    return animate && (time < logoData.duration || Boolean(confetti?.view.children.length));
+    confetti?.advance(Math.min(deltaMS, Math.max(0, elapsed - logoData.firework)));
+    return animate && (elapsed < logoData.duration || Boolean(confetti?.view.children.length));
   }
 
   return { view, resize, advance };

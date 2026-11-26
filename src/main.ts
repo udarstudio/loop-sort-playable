@@ -17,10 +17,9 @@ import { createWinScreen } from './win-screen';
 const maxRenderScale = 4;
 const maxRenderPixels = 3_000_000;
 const backgroundEdge = '#aa9bcb';
-const winHoldDuration = 1000;
 const jamHoldDuration = 2000;
 const jamPulseDuration = 650;
-const musicUrl = import.meta.env.VITE_PLAYABLE_VARIANT === 'alternative' ? alternativeMusicUrl : classicMusicUrl;
+const musicUrl = import.meta.env.VITE_PLAYABLE_THEME === 'alternative' ? alternativeMusicUrl : classicMusicUrl;
 
 function addBackgroundMusic(canvas: HTMLCanvasElement): () => void {
   const music = new Audio();
@@ -95,11 +94,34 @@ function createTruckSounds() {
 
 async function startPlayable(mount: HTMLElement): Promise<void> {
   const app = new Application();
-  const board = document.createElement('div');
-  board.className = 'board';
+  const configuredVariant = import.meta.env.VITE_PLAYABLE_VARIANT;
+  const variant = configuredVariant === 'staged' || configuredVariant === 'win' ? configuredVariant : 'standard';
+  mount.classList.toggle('four-tap-win', variant === 'win');
+  const board = mount.querySelector<HTMLElement>('.board')!;
+  const conveyorHud = board.querySelector<HTMLElement>('.conveyor-hud')!;
+  conveyorHud.style.left = `${conveyorCenter.x / boardWidth * 100}%`;
+  conveyorHud.style.top = `${conveyorCenter.y / boardHeight * 100}%`;
+  const download = mount.querySelector<HTMLButtonElement>('.download-cta')!;
+  const winResult = mount.querySelector<HTMLElement>('.win-result')!;
+  const { mraid } = window as Window & { mraid?: {
+    open(): void;
+    getState(): string;
+    addEventListener(event: 'ready', callback: () => void): void;
+  } };
+  let hasPlayed = false;
+  if (mraid) {
+    mraid.addEventListener('ready', enableDownload);
+    download.addEventListener('click', () => {
+      if (mraid.getState() !== 'loading') mraid.open();
+    });
+  }
+
+  function enableDownload(): void {
+    if (hasPlayed && mraid && mraid.getState() !== 'loading') download.disabled = false;
+  }
+
   mount.style.setProperty('--board-aspect', String(boardWidth / boardHeight));
   mount.style.setProperty('--conveyor-top-ratio', String(conveyorTop / boardWidth));
-  mount.appendChild(board);
 
   function getLayout() {
     const viewport = mount.getBoundingClientRect();
@@ -132,8 +154,6 @@ async function startPlayable(mount: HTMLElement): Promise<void> {
 
   const capacity = document.createElement('output');
   capacity.className = 'conveyor-capacity';
-  capacity.style.left = `${conveyorCenter.x / boardWidth * 100}%`;
-  capacity.style.top = `${conveyorCenter.y / boardHeight * 100}%`;
   capacity.setAttribute('aria-label', 'Conveyor capacity in blocks');
   const showCapacity = (count: number) => {
     capacity.value = `${count} / ${conveyorCapacity}`;
@@ -144,25 +164,23 @@ async function startPlayable(mount: HTMLElement): Promise<void> {
   const sounds = createTruckSounds();
   const cargo = createConveyorCargo(showCapacity, sounds.onPieceDeparture);
   const confetti = animate ? createTruckConfetti() : undefined;
-  const easyStart = import.meta.env.VITE_EASY_START === 'true';
-  let winHoldRemaining = 0;
   const scene = createBoard(truckArt, cargo, {
     ...sounds,
+    onUnload() {
+      sounds.onUnload();
+      hasPlayed = true;
+      enableDownload();
+    },
     onComplete(x, y) {
       sounds.onComplete();
       confetti?.burst(x, y);
-      if (winHoldRemaining > 0 || !scene.receivers.every((truck) => truck.isComplete())) return;
-      winHoldRemaining = winHoldDuration;
-      boardFrame.eventMode = 'none';
     },
-  }, { easyStart });
+  }, variant);
   app.canvas.className = 'playable-canvas';
   mount.prepend(app.canvas);
-  board.appendChild(capacity);
+  conveyorHud.prepend(capacity);
   const stopBackgroundMusic = addBackgroundMusic(app.canvas);
   const gameOver = mount.querySelector<HTMLElement>('.game-over')!;
-  const retry = gameOver.querySelector<HTMLButtonElement>('button')!;
-  retry.addEventListener('click', () => window.location.reload());
   let jammedFor = 0;
 
   const handMode = import.meta.env.VITE_HAND_MODE;
@@ -187,23 +205,20 @@ async function startPlayable(mount: HTMLElement): Promise<void> {
   if (confetti) boardFrame.addChild(confetti.view);
 
   function showWin(): void {
+    boardFrame.eventMode = 'none';
     winScreen.view.visible = true;
     stopBackgroundMusic();
     mount.classList.add('playable-won');
     mount.setAttribute('aria-label', 'Loop Sort complete');
+    board.setAttribute('aria-hidden', 'true');
+    if (variant === 'win') {
+      winResult.hidden = false;
+    }
+    winScreen.advance(0, sounds.onWin);
   }
 
   app.ticker.add(({ deltaMS }) => {
-    if (winHoldRemaining > 0) {
-      const holdTime = Math.min(deltaMS, winHoldRemaining);
-      confetti?.advance(holdTime);
-      winHoldRemaining -= holdTime;
-      if (winHoldRemaining > 0) return;
-      showWin();
-      deltaMS -= holdTime;
-    }
     if (winScreen.view.visible) {
-      confetti?.advance(deltaMS);
       if (!winScreen.advance(deltaMS, sounds.onWin)) {
         app.render();
         app.stop();
@@ -211,7 +226,10 @@ async function startPlayable(mount: HTMLElement): Promise<void> {
       return;
     }
     scene.advance(deltaMS);
-    if (winHoldRemaining > 0) return;
+    if (scene.hasWon()) {
+      showWin();
+      return;
+    }
     let beltDeltaMS = deltaMS;
     if (jammedFor > 0) {
       const brakeTime = Math.min(deltaMS, jamHoldDuration - jammedFor);
@@ -234,8 +252,8 @@ async function startPlayable(mount: HTMLElement): Promise<void> {
         boardFrame.eventMode = 'none';
         stopBackgroundMusic();
         mount.classList.add('playable-lost');
+        board.setAttribute('aria-hidden', 'true');
         gameOver.hidden = false;
-        retry.focus();
         app.render();
         app.stop();
       }
@@ -262,7 +280,8 @@ async function startPlayable(mount: HTMLElement): Promise<void> {
       Math.max(centerY, layout.height - centerY),
     );
     background.scale.set(radius / layout.scale);
-    winScreen.resize(layout.width, layout.height);
+    const winLogoBottom = winScreen.resize(layout.width, layout.height);
+    winResult.style.setProperty('--win-logo-bottom', `${winLogoBottom}px`);
     renderedLayout = layout;
     if (winScreen.view.visible || !gameOver.hidden) app.render();
   }
@@ -281,6 +300,6 @@ const mount = document.querySelector<HTMLElement>('#playable');
 if (mount) {
   void startPlayable(mount).catch((error: unknown) => {
     console.error('Could not start Loop Sort.', error);
-    mount.textContent = 'The playable could not start.';
+    mount.querySelector('.board')?.replaceChildren('The playable could not start.');
   });
 }

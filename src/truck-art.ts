@@ -24,11 +24,11 @@ export type TruckArt = {
 
 export const blockHeight = 15;
 const blockWidth = 28;
-// Both variants use the same color IDs for the puzzle layout.
-const blockUrls = import.meta.env.VITE_PLAYABLE_VARIANT === 'alternative'
+// Both themes use the same color IDs for the puzzle layout.
+const blockUrls = import.meta.env.VITE_PLAYABLE_THEME === 'alternative'
   ? { pink: roseBlockUrl, orange: yellowBlockUrl, white: blueBlockUrl }
   : { pink: pinkBlockUrl, orange: orangeBlockUrl, white: whiteBlockUrl };
-const pieceUrls = import.meta.env.VITE_PLAYABLE_VARIANT === 'alternative'
+const pieceUrls = import.meta.env.VITE_PLAYABLE_THEME === 'alternative'
   ? { pink: rosePieceUrl, orange: yellowPieceUrl, white: bluePieceUrl }
   : { pink: pinkPieceUrl, orange: orangePieceUrl, white: whitePieceUrl };
 const blockX = 46;

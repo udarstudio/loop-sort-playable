@@ -1,5 +1,5 @@
 import { Container, Graphics, Sprite } from 'pixi.js';
-import type { createConveyorCargo } from './conveyor-cargo';
+import { conveyorCapacity, type createConveyorCargo } from './conveyor-cargo';
 import { conveyorEntryDistance } from './conveyor-path';
 import {
   createStackFill, landingProgress, pieceFlightDuration, pieceLandingTime, piecesPerBlock, preparePieceToStack,
@@ -31,8 +31,8 @@ function shuffle<T>(items: T[]): T[] {
   return items;
 }
 
-function createTruckLoads(easyStart: boolean): BlockColor[][] {
-  if (easyStart) {
+function createTruckLoads(staged: boolean): BlockColor[][] {
+  if (staged) {
     const blocker = blockColors[Math.floor(Math.random() * blockColors.length)];
     const matches = blockColors.filter((color) => color !== blocker);
     if (Math.random() < 0.5) matches.reverse();
@@ -78,6 +78,24 @@ function createTruckLoads(easyStart: boolean): BlockColor[][] {
     const start = index * truckCapacity;
     return blocks.slice(start, start + truckCapacity);
   });
+}
+
+type PlayableVariant = 'standard' | 'staged' | 'win';
+const pinkLanes = [2, 4];
+const winOpeningPinkBlocks = 5;
+
+function createWinLoads(): BlockColor[][] {
+  const run = (count: number, color: BlockColor) => Array<BlockColor>(count).fill(color);
+  const firstPinkLoad = 4;
+  const secondPinkLoad = conveyorCapacity - 1 - firstPinkLoad - winOpeningPinkBlocks;
+  return [
+    ['orange', ...run(8, 'white')],
+    run(truckCapacity - 1, 'orange'), // Collects the opening blocker.
+    [...run(firstPinkLoad, 'pink'), ...run(truckCapacity - firstPinkLoad, 'white')],
+    ['orange', 'pink'],
+    [...run(secondPinkLoad, 'pink'), ...run(truckCapacity - secondPinkLoad, 'orange')],
+    [...run(11, 'orange'), ...run(3, 'white'), ...run(2, 'pink')],
+  ];
 }
 
 function createConveyor(): Graphics {
@@ -203,9 +221,12 @@ function addTruck(
     checkmark.eventMode = 'none';
   }
 
+  function hasCargoInFlight(): boolean {
+    return loading.some(block => block.landed < block.pieces.length);
+  }
+
   function canUnload(): boolean {
-    return canTap() && body.eventMode === 'static' && !conveyor.isUnloading(distance)
-      && !loading.some((block) => block.landed < block.pieces.length);
+    return canTap() && body.eventMode === 'static' && !conveyor.isUnloading(distance) && !hasCargoInFlight();
   }
 
   body.eventMode = 'static';
@@ -321,6 +342,7 @@ function addTruck(
 
   return {
     distance, receive, canReceiveColor, hasPartialCargo, advance, isComplete, hasMixedCargo,
+    hasCargoInFlight,
     isEmpty: () => cargo.length === 0 && loading.length === 0,
     hint() {
       const top = loading.at(-1)?.sprite ?? cargo[0];
@@ -331,16 +353,24 @@ function addTruck(
 }
 
 export function createBoard(
-  art: TruckArt, conveyor: ReturnType<typeof createConveyorCargo>, events: TruckEvents,
-  { easyStart }: { easyStart: boolean },
+  art: TruckArt, conveyor: ReturnType<typeof createConveyorCargo>, events: TruckEvents, variant: PlayableVariant,
 ) {
   const board = new Container();
-  const loads = createTruckLoads(easyStart);
-  let openingLoad = easyStart ? loads[1] : undefined;
-  const laneLoads = easyStart ? shuffle([...loads]) : loads;
+  const fourTapWin = variant === 'win';
+  const staged = variant === 'staged';
+  const openingLane = fourTapWin ? 0 : 1;
+  const loads = fourTapWin ? createWinLoads() : createTruckLoads(staged);
+  const hasOpening = staged || fourTapWin;
+  let openingLoad = hasOpening ? loads[openingLane] : undefined;
+  const laneLoads = staged ? shuffle([...loads]) : loads;
   if (openingLoad) {
     const match = art.blocks[openingLoad[1]];
-    conveyor.preload(Array.from({ length: truckCapacity - 1 }, () => match));
+    const needed = truckCapacity - (openingLoad.length - 1);
+    const openingBelt = Array.from({ length: needed }, () => match);
+    if (fourTapWin) {
+      openingBelt.push(...Array.from({ length: winOpeningPinkBlocks }, () => art.blocks.pink));
+    }
+    conveyor.preload(openingBelt);
   }
 
   const belt = board.addChild(createConveyor());
@@ -354,20 +384,26 @@ export function createBoard(
       events.onUnload();
     },
   };
-  // Reserve the last slot for the blocker so the first move always opens the belt.
-  const trucks = laneLoads.map((blocks, lane) => addTruck(
+  const trucks: ReturnType<typeof addTruck>[] = laneLoads.map((blocks, lane) => addTruck(
     board, firstTruckLeft + lane * truckSpacing, blocks, art, conveyor, truckEvents,
-    () => !openingLoad || openingLoad === blocks,
+    () => fourTapWin || !openingLoad || openingLoad === blocks,
   ));
+  const hintOrder = fourTapWin ? [openingLane, ...pinkLanes] : [1, 4, 5, 3, 0, 2];
 
   return {
     view: board,
     jamGlow: createJamGlow(),
     receivers: trucks,
+    hasWon: () => fourTapWin
+      ? conveyor.availablePieces() === conveyorCapacity * piecesPerBlock
+        && trucks.every(truck => !truck.hasCargoInFlight())
+      : trucks.every(truck => truck.isComplete()),
     tutorial: {
       // Start with the opening truck, then the three-layer truck. Follow the loads through the shuffle.
-      trucks: easyStart ? [1, 4, 5, 3, 0, 2].map(index => trucks[laneLoads.indexOf(loads[index])]) : trucks,
-      openingTapped: easyStart ? () => openingLoad === undefined : undefined,
+      trucks: hasOpening ? hintOrder.map(index => trucks[laneLoads.indexOf(loads[index])]) : trucks,
+      openingTapped: hasOpening ? () => fourTapWin
+        ? !trucks[openingLane].hasMixedCargo()
+        : openingLoad === undefined : undefined,
     },
     advance(deltaMS: number) {
       let pieceLanded = false;

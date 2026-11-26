@@ -63,7 +63,7 @@ main {
 
 .download-cta {
   position: fixed;
-  z-index: 2;
+  z-index: 5;
   bottom: var(--download-bottom);
   left: 50%;
   translate: -50% 0;
@@ -72,6 +72,7 @@ main {
   width: var(--download-width);
   height: var(--download-height);
   border: 0;
+  border-radius: 10% / 30%;
   padding: 0;
   background: url('./assets/download-button.png') center / 100% 100% no-repeat;
   color: #fff;
@@ -84,6 +85,8 @@ main {
   paint-order: stroke fill;
   text-shadow: 0 2px 1px #123303;
 }
+
+.download-cta:enabled { cursor: pointer; }
 
 @media (min-width: 720px) and (min-aspect-ratio: 4 / 3) and (hover: hover) {
   main {
@@ -129,7 +132,6 @@ main {
 .playable-won .board,
 .playable-won .playable-logo {
   opacity: 0;
-  transition: opacity 400ms linear;
 }
 
 .playable-won .playable-hand,
@@ -137,31 +139,48 @@ main {
   visibility: hidden;
 }
 
-.playable-won .download-cta {
+.playable-won,
+.playable-lost {
+  --end-download-bottom: max(18%, env(safe-area-inset-bottom));
+  --end-download-width: min(64vw, 260px, max(145px, 38vh));
+  --end-download-height: calc(var(--end-download-width) * 135 / 398);
+}
+
+.playable-won .download-cta,
+.playable-lost .download-cta {
   left: 50%;
   right: auto;
-  bottom: max(18%, env(safe-area-inset-bottom));
+  bottom: var(--end-download-bottom);
   translate: -50% 0;
-  width: min(64vw, 260px, max(145px, 38vh));
-  height: auto;
-  aspect-ratio: 398 / 135;
-  animation: win-download-in 280ms ease-out 1400ms both;
+  width: var(--end-download-width);
+  height: var(--end-download-height);
 }
 
-@keyframes win-download-in {
-  from { opacity: 0; scale: 0.88; }
-  to { opacity: 1; scale: 1; }
+@media (prefers-reduced-motion: no-preference) {
+  .playable-won .win-result,
+  .playable-won .download-cta {
+    animation: win-pop 240ms ease-out;
+  }
 }
 
-@media (prefers-reduced-motion: reduce) {
-  .playable-won .board, .playable-won .playable-logo { transition: none; }
-  .playable-won .download-cta { animation: none; }
+@keyframes win-pop {
+  0% { scale: 0.92; }
+  55% { scale: 1.04; }
+  100% { scale: 1; }
 }
 
-.conveyor-capacity {
+.conveyor-hud {
   position: absolute;
   z-index: 2;
   transform: translate(-50%, -50%);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 3cqw;
+  width: 100%;
+}
+
+.conveyor-capacity {
   display: flex;
   align-items: center;
   justify-content: center;
@@ -184,15 +203,64 @@ main {
   background: url('./assets/cube-shape.png') center / contain no-repeat;
 }
 
+.win-goal { display: none; }
+
+.four-tap-win .win-goal {
+  display: block;
+  margin: 0;
+  text-align: center;
+  color: #44305e;
+  font-size: 7.4cqw;
+  line-height: 1;
+}
+
+.win-result {
+  position: absolute;
+  top: calc((var(--win-logo-bottom) + 100% - var(--end-download-bottom) - var(--end-download-height)) / 2);
+  translate: 0 -50%;
+  width: 100%;
+  z-index: 2;
+  margin: 0;
+  color: #fff;
+  text-align: center;
+  font-size: clamp(18px, min(8vw, 6.5vh), 48px);
+  line-height: 1.1;
+  text-shadow: 0 2px 2px #37264f;
+}
+
+@media (max-height: 360px) {
+  .playable-won.four-tap-win {
+    --end-download-bottom: max(10%, env(safe-area-inset-bottom));
+  }
+}
+
+@media (orientation: landscape) and (max-height: 540px) {
+  .four-tap-win {
+    --logo-space: 0px;
+    --download-space: 0px;
+    --logo-width: min(19vw, 150px);
+    --download-width: min(26vw, 190px);
+    --logo-top: var(--safe-inset);
+    --download-bottom: var(--safe-inset);
+  }
+
+  .four-tap-win .playable-logo {
+    left: var(--safe-inset);
+    translate: none;
+  }
+
+  .four-tap-win:not(.playable-won, .playable-lost) > .download-cta {
+    left: auto;
+    right: var(--safe-inset);
+    translate: none;
+  }
+}
+
 .playable-lost .playable-canvas,
 .playable-lost .board,
 .playable-lost .playable-logo {
   filter: blur(6px);
   transition: filter 240ms ease-out;
-}
-
-.playable-lost > .download-cta {
-  visibility: hidden;
 }
 
 .game-over {
@@ -210,14 +278,12 @@ main {
   display: none;
 }
 
-.game-over .download-cta {
-  position: static;
-  translate: none;
-  width: min(64vw, 260px);
-  height: auto;
-  aspect-ratio: 398 / 135;
-  border-radius: 10% / 30%;
-  cursor: pointer;
+.game-over h1 {
+  margin: 0;
+  color: #fff;
+  font-size: clamp(30px, min(9vw, 12vh), 64px);
+  line-height: 1.1;
+  text-shadow: 0 2px 2px #37264f;
 }
 
 @keyframes game-over-in {
