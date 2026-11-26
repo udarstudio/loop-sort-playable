@@ -6,7 +6,7 @@ import classicMusicUrl from './assets/casual-music-loop-18.mp3';
 import piecePopUrl from './assets/pop-2.mp3';
 import truckCompleteUrl from './assets/sfx-powerup-bright-1.mp3';
 import winSoundUrl from './assets/win-1.mp3';
-import { boardHeight, boardWidth, conveyorCenter, conveyorTop, createBoard, type PlayableVariant } from './board';
+import { boardHeight, boardWidth, conveyorCenter, conveyorTop, createBoard, truckCargoHeightAt, type PlayableVariant } from './board';
 import { createConveyorFlow } from './conveyor-arrows';
 import { conveyorCapacity, createConveyorCargo } from './conveyor-cargo';
 import { addMouseHand, addTutorialHand } from './hand';
@@ -76,6 +76,8 @@ function createTruckSounds() {
   const pop = loadSound(piecePopUrl);
   const playPop = (rate: number, output: AudioNode) =>
     pop(rate * (0.92 + Math.random() * 0.16), output);
+  const playCubePop = (rate: number, y: number) =>
+    playPop(rate * (0.82 + 0.36 * truckCargoHeightAt(y)), pieceVolume);
   const powerUp = loadSound(truckCompleteUrl);
   const win = loadSound(winSoundUrl);
   return {
@@ -83,11 +85,11 @@ function createTruckSounds() {
       if (audio.state === 'running') void playPop(1, unloadVolume);
       else void audio.resume().then(() => playPop(1, unloadVolume), () => {});
     },
-    onPieceDeparture() {
-      void playPop(3, pieceVolume);
+    onPieceDeparture(y: number) {
+      void playCubePop(1.5, y);
     },
-    onPieceLanded() {
-      void playPop(3.5, pieceVolume);
+    onPieceLanded(y: number) {
+      void playCubePop(2.3, y);
     },
     onComplete() {
       void powerUp();
@@ -268,7 +270,7 @@ async function startPlayable(mount: HTMLElement): Promise<void> {
     const distance = cargo.advance(beltDeltaMS, scene.receivers);
     flow.advance(distance);
     confetti?.advance(deltaMS);
-    updateHand?.(deltaMS, animate);
+    updateHand?.(deltaMS);
 
     if (cargo.isJammed(scene.receivers)) {
       if (jammedFor === 0) {

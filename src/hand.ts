@@ -7,7 +7,7 @@ type TruckHint = {
   isComplete(): boolean;
   isEmpty(): boolean;
   hasMixedCargo(): boolean;
-  updateHintWave(deltaMS?: number): void;
+  updateHint(deltaMS?: number): void;
 };
 
 type Tutorial = {
@@ -34,19 +34,19 @@ export function addTutorialHand(board: HTMLElement, { trucks, openingTapped }: T
   const input = new AbortController();
   const listenerOptions = { signal: input.signal };
   let activeTruck: TruckHint | undefined;
-  let waveTruck: TruckHint | undefined;
+  let hintedTruck: TruckHint | undefined;
   let stage = 0;
   let showAfter = 0;
   const pressedPointers = new Set<number>();
 
-  function stopWave(): void {
-    waveTruck?.updateHintWave();
-    waveTruck = undefined;
+  function clearHint(): void {
+    hintedTruck?.updateHint();
+    hintedTruck = undefined;
   }
 
   function reset(): void {
     hand.hidden = true;
-    stopWave();
+    clearHint();
     showAfter = performance.now() + idleDelay;
   }
 
@@ -65,7 +65,7 @@ export function addTutorialHand(board: HTMLElement, { trucks, openingTapped }: T
     reset();
   }, listenerOptions);
 
-  function update(deltaMS = 0, animateWave = false): void {
+  function update(deltaMS = 0): void {
     if (input.signal.aborted) return;
     if (openingTapped) {
       if (stage === 0 && openingTapped()) stage++;
@@ -74,7 +74,7 @@ export function addTutorialHand(board: HTMLElement, { trucks, openingTapped }: T
     }
     const finished = openingTapped ? stage === trucks.length : activeTruck && hasFinished(activeTruck);
     if (finished) {
-      stopWave();
+      clearHint();
       hand.remove();
       input.abort();
       return;
@@ -86,12 +86,12 @@ export function addTutorialHand(board: HTMLElement, { trucks, openingTapped }: T
     }
     const point = activeTruck?.hint();
     hand.hidden = !point;
-    const nextWave = animateWave && point ? activeTruck : undefined;
-    if (waveTruck !== nextWave) {
-      stopWave();
-      waveTruck = nextWave;
+    const nextHint = point ? activeTruck : undefined;
+    if (hintedTruck !== nextHint) {
+      clearHint();
+      hintedTruck = nextHint;
     }
-    waveTruck?.updateHintWave(deltaMS);
+    hintedTruck?.updateHint(deltaMS);
     if (point) {
       hand.style.left = `${100 * point.x / width}%`;
       hand.style.top = `${100 * point.y / height}%`;

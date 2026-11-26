@@ -42,7 +42,7 @@ type Departure = {
   onProgress?: (departed: number, finished: boolean, started: number) => void;
 };
 
-export function createConveyorCargo(onCountChange: (count: number) => void, onPieceDeparture: () => void) {
+export function createConveyorCargo(onCountChange: (count: number) => void, onPieceDeparture: (y: number) => void) {
   const view = new Container();
   const belt: BeltPiece[] = [];
   const moving: BeltPiece[] = [];
@@ -142,7 +142,7 @@ export function createConveyorCargo(onCountChange: (count: number) => void, onPi
       resolvePieceCollisions(moving);
     }
 
-    let pieceDeparted = false;
+    let departedY: number | undefined;
     for (const departure of departures.values()) departure.remaining = 0;
     for (const piece of belt) {
       const launching = piece.elapsed < pieceFlightDuration;
@@ -158,11 +158,11 @@ export function createConveyorCargo(onCountChange: (count: number) => void, onPi
         if (waiting) {
           departure.started++;
           piece.sprite.visible = true;
+          departedY ??= piece.from.y;
           const offset = piece.sourceOffset!;
           piece.from.x += offset.x;
           piece.from.y += offset.y;
           piece.sourceOffset = undefined;
-          pieceDeparted = true;
         }
         if (piece.elapsed === pieceFlightDuration) departure.inFlight--;
       }
@@ -175,7 +175,7 @@ export function createConveyorCargo(onCountChange: (count: number) => void, onPi
       if (finished) departure.onProgress = undefined;
       if (departure.inFlight === 0) departures.delete(source);
     }
-    if (pieceDeparted) onPieceDeparture();
+    if (departedY !== undefined) onPieceDeparture(departedY);
 
     // Process leading pieces first when several reach the same truck in one frame.
     belt.sort((a, b) => a.distance - b.distance);

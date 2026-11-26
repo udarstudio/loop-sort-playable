@@ -8,8 +8,8 @@ const depthLayers = 2;
 const piecesPerRow = columns * depthLayers;
 const stackDepthOffset = 2.2;
 export const piecesPerBlock = piecesPerRow * stackRows;
-export const pieceFlightDuration = 340;
-export const pieceLandingTime = 275;
+export const pieceFlightDuration = 370;
+export const pieceStackDuration = pieceFlightDuration + 65;
 const beltLanes = 3;
 const pieceSize = 11;
 const pieceWidth = 12;
@@ -165,7 +165,7 @@ export function preparePieceToStack(piece: Piece): void {
 }
 
 export function landingProgress(elapsed: number): number {
-  return Math.max(0, Math.min(1, (elapsed - pieceLandingTime) / (pieceFlightDuration - pieceLandingTime)));
+  return Math.max(0, Math.min(1, (elapsed - pieceFlightDuration) / (pieceStackDuration - pieceFlightDuration)));
 }
 
 export function createStackFill(texture: Texture, blockHeight: number) {
@@ -223,9 +223,9 @@ export function createStackFill(texture: Texture, blockHeight: number) {
   return { view, update };
 }
 
-export function stackPiece(piece: Piece, index: number, block: Sprite, elapsed: number, truckOffset: PointData): void {
+export function stackPiece(piece: Piece, index: number, block: Sprite, elapsed: number, truckOffset: PointData): number {
   const { x, y, width, height } = stackCell(block, index);
-  const travel = Math.min(1, elapsed / pieceLandingTime);
+  const travel = Math.min(1, elapsed / pieceFlightDuration);
   animatePieceFlight(piece, x + truckOffset.x, y + truckOffset.y, width, height, 0, travel * travel * (3 - 2 * travel));
   const contact = landingProgress(elapsed);
   if (contact > 0) {
@@ -235,6 +235,7 @@ export function stackPiece(piece: Piece, index: number, block: Sprite, elapsed: 
     piece.sprite.alpha = 1 - contact;
   }
   updatePieceShine(piece);
+  return y;
 }
 
 function animatePieceFlight(

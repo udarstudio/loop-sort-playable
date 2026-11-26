@@ -2,7 +2,7 @@ import { Container, Graphics, Sprite } from 'pixi.js';
 import { conveyorCapacity, type createConveyorCargo } from './conveyor-cargo';
 import { conveyorEntryDistance } from './conveyor-path';
 import {
-  createStackFill, landingProgress, pieceFlightDuration, pieceLandingTime, piecesPerBlock, preparePieceToStack,
+  createStackFill, landingProgress, pieceFlightDuration, pieceStackDuration, piecesPerBlock, preparePieceToStack,
   stackPiece, stackSide, type Piece,
 } from './conveyor-pieces';
 import { blockColors, createCargoRun, type BlockColor, type TruckArt } from './truck-art';
@@ -20,6 +20,8 @@ export const conveyorCenter = {
 
 const truckCapacity = 16;
 const truckTop = 302;
+const cargoHeight = 271;
+const cargoBottom = truckTop + 2 + cargoHeight;
 const unloadHopDuration = 180;
 const bounceDuration = 500;
 const bouncePerPiece = 1;
@@ -27,8 +29,13 @@ const bounceMaxDistance = 10;
 const sideNudgeDuration = 50;
 const hintPulseDuration = 300;
 const hintPulseStagger = 75;
+const headlightFlashPeriod = 900;
 const restingOffset = { x: 0, y: 0 };
 const completionCheckColors = { pink: 0x7b1f53, orange: 0x834018, white: 0x635773 };
+
+export function truckCargoHeightAt(y: number): number {
+  return Math.max(0, Math.min(1, (cargoBottom - y) / cargoHeight));
+}
 
 function shuffle<T>(items: T[]): T[] {
   for (let index = items.length - 1; index > 0; index--) {
@@ -134,7 +141,7 @@ type ConveyorInput = Pick<ReturnType<typeof createConveyorCargo>, 'unload' | 'av
 
 type TruckEvents = {
   onUnload(): void;
-  onPieceLanded(): void;
+  onPieceLanded(y: number): void;
   onComplete(x: number, y: number): void;
 };
 
@@ -158,14 +165,14 @@ function addTruck(
   const body = new Sprite(art.body);
   body.position.set(left, truckTop);
   truck.addChild(body);
-  truck.addChild(createTruckHeadlights()).position.copyFrom(body.position);
+  const headlights = truck.addChild(createTruckHeadlights());
+  headlights.position.copyFrom(body.position);
+  headlights.visible = false;
   const centerX = body.x + body.width / 2;
   const centerY = truckTop + body.height / 2;
 
   const cargoX = left + 8;
-  const cargoHeight = 271;
   const blockHeight = cargoHeight / truckCapacity;
-  const cargoBottom = truckTop + 2 + cargoHeight;
   const firstBlockY = cargoBottom - blocks.length * blockHeight;
   const distance = conveyorEntryDistance(centerX);
   const cargoView = truck.addChild(new Container());
@@ -180,7 +187,7 @@ function addTruck(
   cargoView.addChild(fill.view);
   let topRunLength = 0;
   let hintWave: Container<Container> | undefined;
-  let hintWaveElapsed = 0;
+  let hintElapsed = 0;
 
   function* cargoRuns() {
     for (let start = 0; start < cargo.length;) {
@@ -192,14 +199,18 @@ function addTruck(
     }
   }
 
-  function updateHintWave(deltaMS?: number): void {
+  function updateHint(deltaMS?: number): void {
     if (deltaMS === undefined) {
       hintWave?.destroy({ children: true });
       hintWave = undefined;
-      hintWaveElapsed = 0;
+      hintElapsed = 0;
+      headlights.visible = isComplete();
       return;
     }
 
+    hintElapsed += deltaMS;
+    headlights.visible = !animate || hintElapsed % headlightFlashPeriod < headlightFlashPeriod / 2;
+    if (!animate) return;
     if (!hintWave) {
       hintWave = truck.addChild(new Container<Container>({ eventMode: 'none' }));
       for (const { block, length } of cargoRuns()) {
@@ -214,8 +225,8 @@ function addTruck(
     const pulses = hintWave.children;
     const turnAt = (pulses.length - 1) * hintPulseStagger + hintPulseDuration / 2;
     const roundTrip = 2 * turnAt;
-    hintWaveElapsed = (hintWaveElapsed + deltaMS) % roundTrip;
-    const waveTime = Math.min(hintWaveElapsed, roundTrip - hintWaveElapsed);
+    const cycleTime = hintElapsed % roundTrip;
+    const waveTime = Math.min(cycleTime, roundTrip - cycleTime);
     for (const [index, pulse] of pulses.entries()) {
       const delay = (pulses.length - 1 - index) * hintPulseStagger;
       const progress = (waveTime - delay) / hintPulseDuration;
@@ -238,7 +249,7 @@ function addTruck(
   }
 
   function updateCargoAppearance(): void {
-    if (hintWave) updateHintWave();
+    if (hintWave) updateHint();
     while (cargoView.children.length > 1) cargoView.removeChildAt(1).destroy();
     topRunLength = 0;
     for (const { block, start, length } of cargoRuns()) {
@@ -262,6 +273,7 @@ function addTruck(
   function markComplete(): void {
     body.eventMode = 'none';
     body.cursor = 'default';
+    headlights.visible = true;
     const { texture } = cargo[0];
     const color = blockColors.find((color) => art.blocks[color] === texture) ?? 'white';
     const checkmark = truck.addChild(new Graphics()
@@ -373,7 +385,7 @@ function addTruck(
     }, sideNudgeDuration);
   }
 
-  function advance(deltaMS: number): boolean {
+  function advance(deltaMS: number): number | undefined {
     const hopping = unloadHopElapsed < unloadHopDuration;
     if (hopping) unloadHopElapsed = Math.min(unloadHopDuration, unloadHopElapsed + deltaMS);
     if (hopping || bounceRemaining > 0 || recoil !== 0) {
@@ -384,16 +396,18 @@ function addTruck(
     }
 
     let piecesLanded = 0;
+    let landedY: number | undefined;
     let sideHits = 0;
     for (const block of loading) {
       for (let index = block.landed; index < block.pieces.length; index++) {
         const flight = block.pieces[index];
         const previousElapsed = flight.elapsed;
-        flight.elapsed = Math.min(pieceFlightDuration, flight.elapsed + deltaMS);
-        const finished = flight.elapsed === pieceFlightDuration;
-        stackPiece(flight.piece, index, block.sprite, flight.elapsed, finished ? restingOffset : truck.position);
-        if (previousElapsed < pieceLandingTime && flight.elapsed >= pieceLandingTime) {
+        flight.elapsed = Math.min(pieceStackDuration, flight.elapsed + deltaMS);
+        const finished = flight.elapsed === pieceStackDuration;
+        const stackY = stackPiece(flight.piece, index, block.sprite, flight.elapsed, finished ? restingOffset : truck.position);
+        if (previousElapsed < pieceFlightDuration && flight.elapsed >= pieceFlightDuration) {
           piecesLanded++;
+          landedY ??= stackY;
           if (animate) sideHits += stackSide(index);
         }
         if (finished) {
@@ -420,11 +434,11 @@ function addTruck(
     } else if (loading.length > 0 && !conveyor.isUnloading(distance)) {
       updateStackFill();
     }
-    return piecesLanded > 0;
+    return landedY;
   }
 
   return {
-    distance, receive, canReceiveColor, hasPartialCargo, advance, isComplete, hasMixedCargo, updateHintWave,
+    distance, receive, canReceiveColor, hasPartialCargo, advance, isComplete, hasMixedCargo, updateHint,
     hasCargoInFlight,
     isEmpty: () => cargo.length === 0 && loading.length === 0,
     hint() {
@@ -492,11 +506,12 @@ export function createBoard(
         : openingLoad === undefined : undefined,
     },
     advance(deltaMS: number) {
-      let pieceLanded = false;
+      let landedY: number | undefined;
       for (const truck of trucks) {
-        if (truck.advance(deltaMS)) pieceLanded = true;
+        const stackY = truck.advance(deltaMS);
+        landedY ??= stackY;
       }
-      if (pieceLanded) events.onPieceLanded();
+      if (landedY !== undefined) events.onPieceLanded(landedY);
     },
   };
 }
