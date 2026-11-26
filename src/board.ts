@@ -80,21 +80,21 @@ function createTruckLoads(staged: boolean): BlockColor[][] {
   });
 }
 
-type PlayableVariant = 'standard' | 'staged' | 'win';
+export type PlayableVariant = 'standard' | 'staged' | 'win';
 const pinkLanes = [2, 4];
 const winOpeningPinkBlocks = 5;
+const blockRun = (count: number, color: BlockColor) => Array<BlockColor>(count).fill(color);
 
 function createWinLoads(): BlockColor[][] {
-  const run = (count: number, color: BlockColor) => Array<BlockColor>(count).fill(color);
   const firstPinkLoad = 4;
   const secondPinkLoad = conveyorCapacity - 1 - firstPinkLoad - winOpeningPinkBlocks;
   return [
-    ['orange', ...run(8, 'white')],
-    run(truckCapacity - 1, 'orange'), // Collects the opening blocker.
-    [...run(firstPinkLoad, 'pink'), ...run(truckCapacity - firstPinkLoad, 'white')],
+    ['orange', ...blockRun(8, 'white')],
+    blockRun(truckCapacity - 1, 'orange'), // Collects the opening blocker.
+    [...blockRun(firstPinkLoad, 'pink'), ...blockRun(truckCapacity - firstPinkLoad, 'white')],
     ['orange', 'pink'],
-    [...run(secondPinkLoad, 'pink'), ...run(truckCapacity - secondPinkLoad, 'orange')],
-    [...run(11, 'orange'), ...run(3, 'white'), ...run(2, 'pink')],
+    [...blockRun(secondPinkLoad, 'pink'), ...blockRun(truckCapacity - secondPinkLoad, 'orange')],
+    [...blockRun(11, 'orange'), ...blockRun(3, 'white'), ...blockRun(2, 'pink')],
   ];
 }
 
@@ -394,10 +394,13 @@ export function createBoard(
     view: board,
     jamGlow: createJamGlow(),
     receivers: trucks,
-    hasWon: () => fourTapWin
-      ? conveyor.availablePieces() === conveyorCapacity * piecesPerBlock
-        && trucks.every(truck => !truck.hasCargoInFlight())
-      : trucks.every(truck => truck.isComplete()),
+    hasWon() {
+      if (fourTapWin) {
+        return conveyor.availablePieces() === conveyorCapacity * piecesPerBlock
+          && trucks.every(truck => !truck.hasCargoInFlight());
+      }
+      return trucks.every(truck => truck.isComplete());
+    },
     tutorial: {
       // Start with the opening truck, then the three-layer truck. Follow the loads through the shuffle.
       trucks: hasOpening ? hintOrder.map(index => trucks[laneLoads.indexOf(loads[index])]) : trucks,

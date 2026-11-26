@@ -6,7 +6,7 @@ import classicMusicUrl from './assets/casual-music-loop-18.mp3';
 import piecePopUrl from './assets/pop-2.mp3';
 import truckCompleteUrl from './assets/sfx-powerup-bright-1.mp3';
 import winSoundUrl from './assets/win-1.mp3';
-import { boardHeight, boardWidth, conveyorCenter, conveyorTop, createBoard } from './board';
+import { boardHeight, boardWidth, conveyorCenter, conveyorTop, createBoard, type PlayableVariant } from './board';
 import { createConveyorFlow } from './conveyor-arrows';
 import { conveyorCapacity, createConveyorCargo } from './conveyor-cargo';
 import { addMouseHand, addTutorialHand } from './hand';
@@ -17,9 +17,15 @@ import { createWinScreen } from './win-screen';
 const maxRenderScale = 4;
 const maxRenderPixels = 3_000_000;
 const backgroundEdge = '#aa9bcb';
+const winHoldDuration = 1500;
 const jamHoldDuration = 2000;
 const jamPulseDuration = 650;
+const truckPraise = ['Great!', 'Awesome!', 'Superb!'];
 const musicUrl = import.meta.env.VITE_PLAYABLE_THEME === 'alternative' ? alternativeMusicUrl : classicMusicUrl;
+const openingHooks = {
+  standard: 'Harder than it seems',
+  staged: 'Looks easy, right?',
+};
 
 function addBackgroundMusic(canvas: HTMLCanvasElement): () => void {
   const music = new Audio();
@@ -95,8 +101,9 @@ function createTruckSounds() {
 async function startPlayable(mount: HTMLElement): Promise<void> {
   const app = new Application();
   const configuredVariant = import.meta.env.VITE_PLAYABLE_VARIANT;
-  const variant = configuredVariant === 'staged' || configuredVariant === 'win' ? configuredVariant : 'standard';
-  mount.classList.toggle('four-tap-win', variant === 'win');
+  const variant: PlayableVariant = configuredVariant === 'staged' || configuredVariant === 'win'
+    ? configuredVariant : 'standard';
+  mount.classList.toggle('win-variant', variant === 'win');
   const board = mount.querySelector<HTMLElement>('.board')!;
   const conveyorHud = board.querySelector<HTMLElement>('.conveyor-hud')!;
   conveyorHud.style.left = `${conveyorCenter.x / boardWidth * 100}%`;
@@ -165,6 +172,8 @@ async function startPlayable(mount: HTMLElement): Promise<void> {
   const sounds = createTruckSounds();
   const cargo = createConveyorCargo(showCapacity, sounds.onPieceDeparture);
   const confetti = animate ? createTruckConfetti() : undefined;
+  let praiseIndex = 0;
+  let winHoldRemaining = 0;
   const scene = createBoard(truckArt, cargo, {
     ...sounds,
     onUnload() {
@@ -175,6 +184,14 @@ async function startPlayable(mount: HTMLElement): Promise<void> {
     onComplete(x, y) {
       sounds.onComplete();
       confetti?.burst(x, y);
+      const praise = document.createElement('span');
+      praise.className = 'truck-praise';
+      praise.textContent = truckPraise[praiseIndex++ % truckPraise.length];
+      praise.setAttribute('aria-hidden', 'true');
+      praise.style.left = `${x / boardWidth * 100}%`;
+      praise.style.top = `${y / boardHeight * 100}%`;
+      praise.addEventListener('animationend', () => praise.remove(), { once: true });
+      board.appendChild(praise);
     },
   }, variant);
   app.canvas.className = 'playable-canvas';
@@ -182,7 +199,7 @@ async function startPlayable(mount: HTMLElement): Promise<void> {
   conveyorHud.prepend(capacity);
   const gameTitle = conveyorHud.querySelector<HTMLElement>('.game-title')!;
   if (variant !== 'win') {
-    gameTitle.textContent = variant === 'staged' ? 'Looks easy, right?' : 'Harder than it seems';
+    gameTitle.textContent = openingHooks[variant];
     gameTitle.classList.add('opening-hook');
   }
   gameTitle.hidden = false;
@@ -212,15 +229,12 @@ async function startPlayable(mount: HTMLElement): Promise<void> {
   if (confetti) boardFrame.addChild(confetti.view);
 
   function showWin(): void {
-    boardFrame.eventMode = 'none';
     winScreen.view.visible = true;
     stopBackgroundMusic();
     mount.classList.add('playable-won');
     mount.setAttribute('aria-label', 'Loop Sort complete');
     board.setAttribute('aria-hidden', 'true');
-    if (variant === 'win') {
-      winResult.hidden = false;
-    }
+    if (variant === 'win') winResult.hidden = false;
     winScreen.advance(0, sounds.onWin);
   }
 
@@ -232,9 +246,16 @@ async function startPlayable(mount: HTMLElement): Promise<void> {
       }
       return;
     }
+    if (winHoldRemaining > 0) {
+      confetti?.advance(deltaMS);
+      winHoldRemaining -= deltaMS;
+      if (winHoldRemaining <= 0) showWin();
+      return;
+    }
     scene.advance(deltaMS);
     if (scene.hasWon()) {
-      showWin();
+      boardFrame.eventMode = 'none';
+      winHoldRemaining = winHoldDuration;
       return;
     }
     let beltDeltaMS = deltaMS;

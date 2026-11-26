@@ -129,6 +129,37 @@ main {
   height: 100%;
 }
 
+.truck-praise {
+  position: absolute;
+  z-index: 4;
+  translate: -50% -50%;
+  margin-top: -5cqw;
+  color: #fff;
+  font-size: 5.4cqw;
+  line-height: 1;
+  white-space: nowrap;
+  -webkit-text-stroke: 0.9cqw #432653;
+  paint-order: stroke fill;
+  text-shadow: 0 0.55cqw 0 #432653;
+  animation: truck-praise-rise 1200ms ease-out both;
+}
+
+@keyframes truck-praise-rise {
+  0% { opacity: 0; scale: 0.65; transform: translateY(0); }
+  18% { opacity: 1; scale: 1.12; }
+  35%, 70% { opacity: 1; scale: 1; }
+  100% { opacity: 0; scale: 1; transform: translateY(-12cqw); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .truck-praise { animation-name: truck-praise-fade; }
+}
+
+@keyframes truck-praise-fade {
+  0%, 75% { opacity: 1; }
+  100% { opacity: 0; }
+}
+
 .playable-won .board,
 .playable-won .playable-logo {
   opacity: 0;
@@ -244,13 +275,13 @@ main {
 }
 
 @media (max-height: 360px) {
-  .playable-won.four-tap-win {
+  .playable-won.win-variant {
     --end-download-bottom: max(10%, env(safe-area-inset-bottom));
   }
 }
 
 @media (orientation: landscape) and (max-height: 540px) {
-  .four-tap-win {
+  .win-variant {
     --logo-space: 0px;
     --download-space: 0px;
     --logo-width: min(19vw, 150px);
@@ -259,12 +290,12 @@ main {
     --download-bottom: var(--safe-inset);
   }
 
-  .four-tap-win .playable-logo {
+  .win-variant .playable-logo {
     left: var(--safe-inset);
     translate: none;
   }
 
-  .four-tap-win:not(.playable-won, .playable-lost) > .download-cta {
+  .win-variant:not(.playable-won, .playable-lost) > .download-cta {
     left: auto;
     right: var(--safe-inset);
     translate: none;
