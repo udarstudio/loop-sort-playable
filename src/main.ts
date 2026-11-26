@@ -102,6 +102,7 @@ async function startPlayable(mount: HTMLElement): Promise<void> {
   conveyorHud.style.left = `${conveyorCenter.x / boardWidth * 100}%`;
   conveyorHud.style.top = `${conveyorCenter.y / boardHeight * 100}%`;
   const download = mount.querySelector<HTMLButtonElement>('.download-cta')!;
+  const playableLogo = mount.querySelector<HTMLImageElement>('.playable-logo')!;
   const winResult = mount.querySelector<HTMLElement>('.win-result')!;
   const { mraid } = window as Window & { mraid?: {
     open(): void;
@@ -179,6 +180,12 @@ async function startPlayable(mount: HTMLElement): Promise<void> {
   app.canvas.className = 'playable-canvas';
   mount.prepend(app.canvas);
   conveyorHud.prepend(capacity);
+  const gameTitle = conveyorHud.querySelector<HTMLElement>('.game-title')!;
+  if (variant !== 'win') {
+    gameTitle.textContent = variant === 'staged' ? 'Looks easy, right?' : 'Harder than it seems';
+    gameTitle.classList.add('opening-hook');
+  }
+  gameTitle.hidden = false;
   const stopBackgroundMusic = addBackgroundMusic(app.canvas);
   const gameOver = mount.querySelector<HTMLElement>('.game-over')!;
   let jammedFor = 0;
@@ -253,6 +260,7 @@ async function startPlayable(mount: HTMLElement): Promise<void> {
         stopBackgroundMusic();
         mount.classList.add('playable-lost');
         board.setAttribute('aria-hidden', 'true');
+        gameOver.querySelector('.game-over-content')!.prepend(playableLogo);
         gameOver.hidden = false;
         app.render();
         app.stop();

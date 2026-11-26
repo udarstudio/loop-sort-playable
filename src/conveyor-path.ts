@@ -5,7 +5,7 @@ const horizontal = track.right - track.left - 2 * track.radius;
 const vertical = track.bottom - track.top - 2 * track.radius;
 const cornerLength = track.radius * Math.PI / 2;
 export const loopLength = 2 * (horizontal + vertical) + 4 * cornerLength;
-export const baseConveyorSpeed = 27;
+export const baseConveyorSpeed = 30;
 
 const sides = [
   { x: track.right - track.radius, y: track.top, dx: -1, dy: 0, length: horizontal, angle: Math.PI },

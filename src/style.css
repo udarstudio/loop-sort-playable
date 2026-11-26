@@ -203,15 +203,30 @@ main {
   background: url('./assets/cube-shape.png') center / contain no-repeat;
 }
 
-.win-goal { display: none; }
-
-.four-tap-win .win-goal {
-  display: block;
+.game-title {
   margin: 0;
   text-align: center;
   color: #44305e;
   font-size: 7.4cqw;
   line-height: 1;
+}
+
+.opening-hook {
+  max-width: 62%;
+  font-size: 6.6cqw;
+  line-height: 1.1;
+  text-wrap: balance;
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .opening-hook { animation: opening-hook-pop 850ms ease-out; }
+}
+
+@keyframes opening-hook-pop {
+  0% { scale: 0.82; rotate: -6deg; }
+  42% { scale: 1.12; rotate: 4deg; }
+  72% { scale: 0.97; rotate: -2deg; }
+  100% { scale: 1; rotate: 0deg; }
 }
 
 .win-result {
@@ -257,8 +272,7 @@ main {
 }
 
 .playable-lost .playable-canvas,
-.playable-lost .board,
-.playable-lost .playable-logo {
+.playable-lost .board {
   filter: blur(6px);
   transition: filter 240ms ease-out;
 }
@@ -267,9 +281,6 @@ main {
   position: absolute;
   inset: 0;
   z-index: 4;
-  display: grid;
-  place-items: center;
-  padding: 16px;
   background: #160f28a6;
   animation: game-over-in 240ms ease-out;
 }
@@ -278,7 +289,26 @@ main {
   display: none;
 }
 
-.game-over h1 {
+.game-over-content {
+  position: absolute;
+  inset: var(--safe-inset) 16px calc(var(--end-download-bottom) + var(--end-download-height) + 8px);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: clamp(10px, 2.2vh, 24px);
+  text-align: center;
+}
+
+.game-over-content .playable-logo {
+  position: static;
+  display: block;
+  translate: none;
+  width: min(68vw, 50vh, 300px);
+  height: auto;
+}
+
+.game-over-content h1 {
   margin: 0;
   color: #fff;
   font-size: clamp(30px, min(9vw, 12vh), 64px);
@@ -293,8 +323,7 @@ main {
 @media (prefers-reduced-motion: reduce) {
   .game-over { animation: none; }
   .playable-lost .playable-canvas,
-  .playable-lost .board,
-  .playable-lost .playable-logo { transition: none; }
+  .playable-lost .board { transition: none; }
 }
 
 .playable-hand {
