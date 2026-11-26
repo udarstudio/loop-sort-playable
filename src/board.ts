@@ -29,6 +29,7 @@ const bounceMaxDistance = 10;
 const sideNudgeDuration = 50;
 const hintPulseDuration = 300;
 const hintPulseStagger = 75;
+const hintFadeDuration = 160;
 const headlightFlashPeriod = 900;
 const restingOffset = { x: 0, y: 0 };
 const completionCheckColors = { pink: 0x7b1f53, orange: 0x834018, white: 0x635773 };
@@ -186,23 +187,17 @@ function addTruck(
   const fill = createStackFill(art.blocks[blocks[0]], blockHeight);
   cargoView.addChild(fill.view);
   let topRunLength = 0;
-  let hintWave: Container<Container> | undefined;
+  let hintWave: Container<Sprite> | undefined;
+  let fadingHintWave: Container<Sprite> | undefined;
   let hintElapsed = 0;
-
-  function* cargoRuns() {
-    for (let start = 0; start < cargo.length;) {
-      const block = cargo[start];
-      let end = start + 1;
-      while (end < cargo.length && cargo[end].texture === block.texture) end++;
-      yield { block, start, length: end - start };
-      start = end;
-    }
-  }
 
   function updateHint(deltaMS?: number): void {
     if (deltaMS === undefined) {
-      hintWave?.destroy({ children: true });
-      hintWave = undefined;
+      if (hintWave) {
+        fadingHintWave?.destroy({ children: true });
+        fadingHintWave = hintWave;
+        hintWave = undefined;
+      }
       hintElapsed = 0;
       headlights.visible = isComplete();
       return;
@@ -212,13 +207,12 @@ function addTruck(
     headlights.visible = !animate || hintElapsed % headlightFlashPeriod < headlightFlashPeriod / 2;
     if (!animate) return;
     if (!hintWave) {
-      hintWave = truck.addChild(new Container<Container>({ eventMode: 'none' }));
-      for (const { block, length } of cargoRuns()) {
-        const pulse = hintWave.addChild(new Container());
-        const halfWidth = block.width / 2;
-        const run = pulse.addChild(createCargoRun(block, length));
-        pulse.position.set(block.x + halfWidth, block.y);
-        run.position.set(-halfWidth, 0);
+      hintWave = truck.addChild(new Container<Sprite>({ eventMode: 'none' }));
+      for (const block of cargo) {
+        const pulse = hintWave.addChild(new Sprite({ texture: block.texture }));
+        pulse.anchor.x = 0.5;
+        pulse.height = block.height;
+        pulse.position.set(block.x + block.width / 2, block.y);
       }
     }
 
@@ -231,7 +225,11 @@ function addTruck(
       const delay = (pulses.length - 1 - index) * hintPulseStagger;
       const progress = (waveTime - delay) / hintPulseDuration;
       pulse.visible = progress > 0 && progress < 1;
-      if (pulse.visible) pulse.scale.x = 1 + 0.24 * Math.sin(Math.PI * progress);
+      if (pulse.visible) {
+        const swell = Math.sin(Math.PI * progress);
+        pulse.scale.x = 1 + 0.24 * swell;
+        pulse.alpha = 0.5 + 0.5 * swell;
+      }
     }
   }
 
@@ -249,12 +247,17 @@ function addTruck(
   }
 
   function updateCargoAppearance(): void {
-    if (hintWave) updateHint();
+    hintWave?.destroy({ children: true });
+    hintWave = undefined;
     while (cargoView.children.length > 1) cargoView.removeChildAt(1).destroy();
     topRunLength = 0;
-    for (const { block, start, length } of cargoRuns()) {
-      if (start === 0) topRunLength = length;
-      else cargoView.addChild(createCargoRun(block, length));
+    for (let start = 0; start < cargo.length;) {
+      const block = cargo[start];
+      let end = start + 1;
+      while (end < cargo.length && cargo[end].texture === block.texture) end++;
+      if (start === 0) topRunLength = end;
+      else cargoView.addChild(createCargoRun(block, end - start));
+      start = end;
     }
     updateStackFill();
   }
@@ -386,6 +389,14 @@ function addTruck(
   }
 
   function advance(deltaMS: number): number | undefined {
+    if (fadingHintWave) {
+      fadingHintWave.alpha -= deltaMS / hintFadeDuration;
+      if (fadingHintWave.alpha <= 0) {
+        fadingHintWave.destroy({ children: true });
+        fadingHintWave = undefined;
+      }
+    }
+
     const hopping = unloadHopElapsed < unloadHopDuration;
     if (hopping) unloadHopElapsed = Math.min(unloadHopDuration, unloadHopElapsed + deltaMS);
     if (hopping || bounceRemaining > 0 || recoil !== 0) {
