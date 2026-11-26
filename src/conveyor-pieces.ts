@@ -1,4 +1,4 @@
-import { Container, Sprite, Texture } from 'pixi.js';
+import { Container, Sprite, Texture, type PointData } from 'pixi.js';
 import { loopLength, positionOnConveyor } from './conveyor-path';
 import { createStretchableBlock, getBaseBlockTexture, getLoosePieceTexture, getPieceShineTexture } from './truck-art';
 
@@ -45,6 +45,11 @@ function stackCell(block: Sprite, index: number) {
     width: columnWidth * 0.94,
     height: rowHeight * 0.94,
   };
+}
+
+export function stackSide(index: number): number {
+  const column = index % columns;
+  return column === 0 ? -1 : column === columns - 1 ? 1 : 0;
 }
 
 export function createPieces(block: Sprite): Sprite[] {
@@ -218,10 +223,10 @@ export function createStackFill(texture: Texture, blockHeight: number) {
   return { view, update };
 }
 
-export function stackPiece(piece: Piece, index: number, block: Sprite, elapsed: number, truckOffsetY: number): void {
+export function stackPiece(piece: Piece, index: number, block: Sprite, elapsed: number, truckOffset: PointData): void {
   const { x, y, width, height } = stackCell(block, index);
   const travel = Math.min(1, elapsed / pieceLandingTime);
-  animatePieceFlight(piece, x, y + truckOffsetY, width, height, 0, travel * travel * (3 - 2 * travel));
+  animatePieceFlight(piece, x + truckOffset.x, y + truckOffset.y, width, height, 0, travel * travel * (3 - 2 * travel));
   const contact = landingProgress(elapsed);
   if (contact > 0) {
     const squash = Math.sin(Math.PI * contact);
