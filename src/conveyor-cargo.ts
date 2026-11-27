@@ -13,7 +13,7 @@ import {
 
 export const conveyorCapacity = 16;
 
-const pieceCapacity = conveyorCapacity * piecesPerBlock;
+export const conveyorPieceCapacity = conveyorCapacity * piecesPerBlock;
 const pieceDepartureInterval = 36;
 const loadingReach = 6;
 const speedResponseMS = 180;
@@ -50,6 +50,7 @@ type Departure = {
 export function createConveyorCargo(onCountChange: (count: number) => void, onPieceDeparture: (y: number) => void) {
   const view = new Container();
   const belt: BeltPiece[] = [];
+  const piecesBySprite = new WeakMap<Container, Piece>();
   const departures = new Map<number, Departure>();
   const physics = createConveyorPhysics();
   let speed = baseConveyorSpeed;
@@ -59,7 +60,20 @@ export function createConveyorCargo(onCountChange: (count: number) => void, onPi
   }
 
   function availablePieces(): number {
-    return pieceCapacity - belt.length;
+    return conveyorPieceCapacity - belt.length;
+  }
+
+  function attachPiece(piece: BeltPiece): void {
+    view.addChild(piece.sprite, piece.shine);
+    piecesBySprite.set(piece.sprite, piece);
+    belt.push(piece);
+  }
+
+  function* visiblePieces(): IterableIterator<Piece> {
+    for (const child of view.children) {
+      const piece = piecesBySprite.get(child);
+      if (piece?.sprite.visible) yield piece;
+    }
   }
 
   function isJammed(receivers: readonly ConveyorReceiver[]): boolean {
@@ -83,8 +97,7 @@ export function createConveyorCargo(onCountChange: (count: number) => void, onPi
       const piece = launchPiece(sprite, entry, index);
       physics.add(piece.body, piece.distance, piece.lane, speed, piece.speedFactor);
       renderPieceOnBelt(piece);
-      view.addChild(piece.sprite, piece.shine);
-      belt.push({
+      attachPiece({
         ...piece, elapsed: pieceFlightDuration, previousDistance: piece.distance,
         sourceDistance: -1, canReturnToSource: true,
       });
@@ -100,8 +113,7 @@ export function createConveyorCargo(onCountChange: (count: number) => void, onPi
       const piece = launchPiece(sprites[index], sourceDistance, firstIndex + index);
       piece.sprite.visible = false;
       piece.shine.visible = false;
-      view.addChild(piece.sprite, piece.shine);
-      belt.push({
+      attachPiece({
         ...piece, elapsed: -(firstIndex + index) * pieceDepartureInterval,
         previousDistance: piece.distance, sourceDistance, canReturnToSource: false, sourceOffset,
       });
@@ -209,7 +221,7 @@ export function createConveyorCargo(onCountChange: (count: number) => void, onPi
   }
 
   return {
-    view, preload, unload, advance, availablePieces, isJammed,
+    view, preload, unload, advance, availablePieces, isJammed, visiblePieces,
     isUnloading: (sourceDistance: number) => departures.has(sourceDistance),
   };
 }

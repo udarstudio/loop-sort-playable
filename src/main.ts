@@ -1,6 +1,6 @@
 import 'pixi.js/graphics';
 import 'pixi.js/events';
-import { Application, Container, FillGradient, Graphics } from 'pixi.js';
+import { Application, Container, FillGradient, Graphics, WebGLRenderer } from 'pixi.js';
 import alternativeMusicUrl from './assets/casual-music-loop-01.mp3';
 import classicMusicUrl from './assets/casual-music-loop-18.mp3';
 import piecePopUrl from './assets/pop-2.mp3';
@@ -9,6 +9,7 @@ import winSoundUrl from './assets/win-1.mp3';
 import { boardHeight, boardWidth, conveyorCenter, conveyorTop, createBoard, truckCargoHeightAt, type PlayableVariant } from './board';
 import { createConveyorFlow } from './conveyor-arrows';
 import { conveyorCapacity, createConveyorCargo } from './conveyor-cargo';
+import { createConveyorCubeView } from './conveyor-cube-view';
 import { addMouseHand, addTutorialHand } from './hand';
 import { loadTruckArt } from './truck-art';
 import { createTruckConfetti } from './truck-confetti';
@@ -227,7 +228,16 @@ async function startPlayable(mount: HTMLElement): Promise<void> {
   }));
   background.position.copyFrom(conveyorCenter);
   background.eventMode = 'none';
-  boardFrame.addChild(background, scene.view, flow.view, cargo.view, scene.jamGlow);
+  const renderer = app.renderer;
+  const cubeModels = renderer instanceof WebGLRenderer && renderer.context.webGLVersion === 2
+    ? createConveyorCubeView(boardWidth, boardHeight, truckArt)
+    : undefined;
+  boardFrame.addChild(background, scene.view, flow.view, cargo.view);
+  if (cubeModels) {
+    boardFrame.addChild(cubeModels.view);
+    cubeModels.sync(cargo.visiblePieces(), 0);
+  }
+  boardFrame.addChild(scene.jamGlow);
   if (confetti) boardFrame.addChild(confetti.view);
 
   function showWin(): void {
@@ -250,6 +260,7 @@ async function startPlayable(mount: HTMLElement): Promise<void> {
     }
     if (winHoldRemaining > 0) {
       scene.advance(deltaMS);
+      cubeModels?.sync(cargo.visiblePieces(), deltaMS);
       confetti?.advance(deltaMS);
       winHoldRemaining -= deltaMS;
       if (winHoldRemaining <= 0) showWin();
@@ -257,6 +268,7 @@ async function startPlayable(mount: HTMLElement): Promise<void> {
     }
     scene.advance(deltaMS);
     if (scene.hasWon()) {
+      cubeModels?.sync(cargo.visiblePieces(), deltaMS);
       boardFrame.eventMode = 'none';
       winHoldRemaining = winHoldDuration;
       return;
@@ -268,6 +280,7 @@ async function startPlayable(mount: HTMLElement): Promise<void> {
       beltDeltaMS = brakeTime * averageSpeed;
     }
     const distance = cargo.advance(beltDeltaMS, scene.receivers);
+    cubeModels?.sync(cargo.visiblePieces(), deltaMS);
     flow.advance(distance);
     confetti?.advance(deltaMS);
     updateHand?.(deltaMS);

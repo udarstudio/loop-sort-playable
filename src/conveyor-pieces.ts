@@ -12,8 +12,7 @@ export const piecesPerBlock = piecesPerRow * stackRows;
 export const pieceFlightDuration = 370;
 export const pieceStackDuration = pieceFlightDuration + 65;
 const beltLanes = 3;
-const pieceHeight = 10;
-const pieceWidth = 11;
+const pieceSize = 12;
 const launchLaneSpacing = 10;
 
 export type Piece = {
@@ -23,8 +22,9 @@ export type Piece = {
   blockTexture: Texture;
   distance: number;
   lane: number;
+  onBelt: boolean;
   speedFactor: number;
-  sizeOffset: number;
+  size: number;
   from: ReturnType<typeof readPose>;
 };
 
@@ -68,8 +68,8 @@ function readPose(sprite: Sprite, velocity: PointData = { x: 0, y: 0 }) {
 export function launchPiece(sprite: Sprite, entry: number, index: number): Piece {
   const laneIndex = (index + 1) % beltLanes;
   const offset = (Math.random() - 0.5) * 4;
-  const sizeOffset = Math.floor(Math.random() * 3) - 1;
-  const body = createCubeBody(pieceWidth + sizeOffset, pieceHeight + sizeOffset, (Math.random() - 0.5) * 0.4);
+  const size = pieceSize + Math.floor(Math.random() * 3) - 1;
+  const body = createCubeBody(size, size, (Math.random() - 0.5) * 0.4);
   sprite.alpha = 1;
   return {
     sprite, shine: new Sprite({ texture: getPieceShineTexture(sprite.texture), anchor: 0.5, eventMode: 'none' }),
@@ -77,26 +77,28 @@ export function launchPiece(sprite: Sprite, entry: number, index: number): Piece
     blockTexture: getBaseBlockTexture(sprite.texture), from: readPose(sprite),
     distance: wrapDistance(entry + offset),
     lane: (laneIndex - 1) * launchLaneSpacing,
+    onBelt: false,
     speedFactor: 0.96 + Math.random() * 0.08,
-    sizeOffset,
+    size,
   };
 }
 
 export function renderPieceOnBelt(piece: Piece): void {
-  const { sprite, body, sizeOffset } = piece;
+  const { sprite, body, size } = piece;
+  piece.onBelt = true;
   sprite.position.copyFrom(body.position);
   sprite.rotation = body.angle;
-  sprite.setSize(pieceWidth + sizeOffset, pieceHeight + sizeOffset);
+  sprite.setSize(size, size);
   updatePieceShine(piece);
 }
 
 export function renderPieceLaunch(piece: Piece, elapsed: number, speed: number): void {
-  const { sprite, sizeOffset } = piece;
+  const { sprite, size } = piece;
   const approach = (elapsed - pieceFlightDuration) / 1000 * speed * piece.speedFactor;
   positionOnConveyor(sprite.position, wrapDistance(piece.distance + approach), piece.lane);
   const progress = elapsed / pieceFlightDuration;
   const blend = progress * progress * (3 - 2 * progress);
-  animatePieceFlight(piece, sprite.x, sprite.y, pieceWidth + sizeOffset, pieceHeight + sizeOffset, piece.body.angle, blend);
+  animatePieceFlight(piece, sprite.x, sprite.y, size, size, piece.body.angle, blend);
   sprite.y -= 10 * (4 * progress * (1 - progress)) ** 2;
   updatePieceShine(piece);
 }
@@ -114,6 +116,7 @@ function updatePieceShine({ sprite, shine }: Pick<Piece, 'sprite' | 'shine'>): v
 
 export function preparePieceToStack(piece: Piece): void {
   const { sprite } = piece;
+  piece.onBelt = false;
   piece.from = readPose(sprite, readCubeVelocity(piece.body));
   piece.from.rotation = Math.atan2(Math.sin(piece.from.rotation), Math.cos(piece.from.rotation));
   sprite.texture = getLoosePieceTexture(piece.blockTexture);
