@@ -26,9 +26,11 @@ main {
   --logo-width: clamp(112px, 34vw, 168px);
   --logo-height: calc(var(--logo-width) * 383 / 600);
   --logo-space: calc(var(--logo-height) + var(--safe-inset));
-  --download-width: clamp(198px, 62vw, 268px);
+  --compact-download-width: clamp(132px, min(42vw, 38vh), 172px);
+  --download-width: var(--compact-download-width);
   --download-height: calc(var(--download-width) * 135 / 398);
   --download-space: calc(var(--download-height) + var(--safe-inset) + 8px);
+  --end-download-width: clamp(132px, min(47vw, 38vh), 188px);
   --board-width: min(100vw, calc((var(--viewport-height) - var(--logo-space) - var(--download-space)) * var(--board-aspect)));
   --board-height: calc(var(--board-width) / var(--board-aspect));
   --board-top: calc((var(--viewport-height) - var(--board-height) + var(--logo-space) - var(--download-space)) / 2);
@@ -79,9 +81,9 @@ main {
   opacity: 1;
   font-family: inherit;
   font-weight: inherit;
-  font-size: clamp(28px, 4.8vw, 38px);
+  font-size: clamp(19px, 5.6vw, 24px);
   line-height: 1;
-  -webkit-text-stroke: 3px #123303;
+  -webkit-text-stroke: 2px #123303;
   paint-order: stroke fill;
   text-shadow: 0 2px 1px #123303;
 }
@@ -97,7 +99,9 @@ main {
     --download-bottom: var(--corner-inset);
     --download-space: 0px;
     --download-side-space: calc((100vw - var(--board-width)) / 2 + var(--board-width) * 28 / 360);
+    --compact-download-width: min(26vw, 190px);
     --download-width: min(250px, calc(var(--download-side-space) - var(--download-bottom) - 16px));
+    --end-download-width: min(64vw, 260px, max(145px, 38vh));
   }
 
   .playable-logo {
@@ -109,6 +113,8 @@ main {
     right: var(--download-bottom);
     left: auto;
     translate: none;
+    font-size: clamp(28px, 4.8vw, 38px);
+    -webkit-text-stroke-width: 3px;
   }
 }
 
@@ -173,7 +179,6 @@ main {
 .playable-won,
 .playable-lost {
   --end-download-bottom: max(18%, env(safe-area-inset-bottom));
-  --end-download-width: min(64vw, 260px, max(145px, 38vh));
   --end-download-height: calc(var(--end-download-width) * 135 / 398);
 }
 
@@ -285,7 +290,7 @@ main {
     --logo-space: 0px;
     --download-space: 0px;
     --logo-width: min(19vw, 150px);
-    --download-width: min(26vw, 190px);
+    --download-width: var(--compact-download-width);
     --logo-top: var(--safe-inset);
     --download-bottom: var(--safe-inset);
   }

@@ -154,7 +154,7 @@ type PartialBlock = {
 
 function addTruck(
   board: Container, left: number, blocks: readonly BlockColor[], art: TruckArt,
-  conveyor: ConveyorInput, events: TruckEvents, canTap: () => boolean, animate: boolean,
+  conveyor: ConveyorInput, events: TruckEvents, animate: boolean,
 ) {
   const truck = board.addChild(new Container());
   let unloadHopElapsed = unloadHopDuration;
@@ -291,7 +291,7 @@ function addTruck(
   }
 
   function canUnload(): boolean {
-    return canTap() && body.eventMode === 'static' && !conveyor.isUnloading(distance) && !hasCargoInFlight();
+    return body.eventMode === 'static' && !conveyor.isUnloading(distance) && !hasCargoInFlight();
   }
 
   body.eventMode = 'static';
@@ -469,7 +469,7 @@ export function createBoard(
   const openingLane = fourTapWin ? 0 : 1;
   const loads = fourTapWin ? createWinLoads() : createTruckLoads(staged);
   const hasOpening = staged || fourTapWin;
-  let openingLoad = hasOpening ? loads[openingLane] : undefined;
+  const openingLoad = hasOpening ? loads[openingLane] : undefined;
   const laneLoads = staged ? shuffle([...loads]) : loads;
   if (openingLoad) {
     const match = art.blocks[openingLoad[1]];
@@ -485,18 +485,12 @@ export function createBoard(
   const { minX: firstTruckLeft, width: beltWidth } = belt.getLocalBounds();
   const truckSpacing = (beltWidth - art.body.width) / (loads.length - 1);
 
-  const truckEvents = {
-    ...events,
-    onUnload() {
-      openingLoad = undefined;
-      events.onUnload();
-    },
-  };
   const trucks: ReturnType<typeof addTruck>[] = laneLoads.map((blocks, lane) => addTruck(
-    board, firstTruckLeft + lane * truckSpacing, blocks, art, conveyor, truckEvents,
-    () => fourTapWin || !openingLoad || openingLoad === blocks, animate,
+    board, firstTruckLeft + lane * truckSpacing, blocks, art, conveyor, events, animate,
   ));
   const hintOrder = fourTapWin ? [openingLane, ...pinkLanes] : [1, 4, 5, 3, 0, 2];
+  // Follow the hinted loads through the staged board's shuffle.
+  const hintedTrucks = hasOpening ? hintOrder.map(index => trucks[laneLoads.indexOf(loads[index])]) : trucks;
 
   return {
     view: board,
@@ -510,11 +504,8 @@ export function createBoard(
       return trucks.every(truck => truck.isComplete());
     },
     tutorial: {
-      // Start with the opening truck, then the three-layer truck. Follow the loads through the shuffle.
-      trucks: hasOpening ? hintOrder.map(index => trucks[laneLoads.indexOf(loads[index])]) : trucks,
-      openingTapped: hasOpening ? () => fourTapWin
-        ? !trucks[openingLane].hasMixedCargo()
-        : openingLoad === undefined : undefined,
+      trucks: hintedTrucks,
+      openingTapped: hasOpening ? () => !hintedTrucks[0].hasMixedCargo() : undefined,
     },
     advance(deltaMS: number) {
       let landedY: number | undefined;
