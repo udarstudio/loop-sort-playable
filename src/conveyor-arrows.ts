@@ -23,7 +23,7 @@ export function createConveyorFlow() {
     offset = (offset + distance) % loopLength;
 
     arrows.forEach((arrow, index) => {
-      arrow.rotation = positionOnConveyor(arrow, (offset + index * spacing) % loopLength);
+      arrow.rotation = positionOnConveyor(arrow.position, (offset + index * spacing) % loopLength);
     });
   }
 

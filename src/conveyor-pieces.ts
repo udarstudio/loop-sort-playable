@@ -1,5 +1,6 @@
 import { Container, Sprite, Texture, type PointData } from 'pixi.js';
-import { loopLength, positionOnConveyor } from './conveyor-path';
+import { positionOnConveyor, wrapDistance } from './conveyor-path';
+import { createCubeBody, readCubeVelocity } from './conveyor-physics';
 import { createStretchableBlock, getBaseBlockTexture, getLoosePieceTexture, getPieceShineTexture } from './truck-art';
 
 const columns = 4;
@@ -11,28 +12,21 @@ export const piecesPerBlock = piecesPerRow * stackRows;
 export const pieceFlightDuration = 370;
 export const pieceStackDuration = pieceFlightDuration + 65;
 const beltLanes = 3;
-const pieceSize = 11;
-const pieceWidth = 12;
-const collisionDiameter = pieceSize;
-const laneLimit = 10;
+const pieceHeight = 10;
+const pieceWidth = 11;
+const launchLaneSpacing = 10;
 
 export type Piece = {
   sprite: Sprite;
   shine: Sprite;
+  body: ReturnType<typeof createCubeBody>;
   blockTexture: Texture;
   distance: number;
   lane: number;
-  forwardVelocity: number;
-  laneVelocity: number;
   speedFactor: number;
-  driftPhase: number;
   sizeOffset: number;
   from: ReturnType<typeof readPose>;
 };
-
-export function wrapDistance(distance: number): number {
-  return ((distance % loopLength) + loopLength) % loopLength;
-}
 
 function stackCell(block: Sprite, index: number) {
   const rear = Math.floor(index / columns) % depthLayers === 0;
@@ -66,87 +60,48 @@ export function createPieces(block: Sprite): Sprite[] {
   });
 }
 
-function readPose(sprite: Sprite) {
+function readPose(sprite: Sprite, velocity: PointData = { x: 0, y: 0 }) {
   const { x, y, width, height, rotation } = sprite;
-  return { x, y, width, height, rotation };
+  return { x, y, width, height, rotation, velocity };
 }
 
-export function launchPiece(sprite: Sprite, entry: number, index: number, count: number, span?: number): Piece {
+export function launchPiece(sprite: Sprite, entry: number, index: number): Piece {
   const laneIndex = (index + 1) % beltLanes;
-  const piecesInLane = Math.ceil((count - index % beltLanes) / beltLanes);
-  const spacing = span === undefined ? pieceSize : span / Math.ceil(count / beltLanes);
-  const offset = (Math.floor(index / beltLanes) - (piecesInLane - 1) / 2) * spacing
-    + (Math.random() - 0.5) * 3;
+  const offset = (Math.random() - 0.5) * 4;
+  const sizeOffset = Math.floor(Math.random() * 3) - 1;
+  const body = createCubeBody(pieceWidth + sizeOffset, pieceHeight + sizeOffset, (Math.random() - 0.5) * 0.4);
   sprite.alpha = 1;
   return {
     sprite, shine: new Sprite({ texture: getPieceShineTexture(sprite.texture), anchor: 0.5, eventMode: 'none' }),
+    body,
     blockTexture: getBaseBlockTexture(sprite.texture), from: readPose(sprite),
     distance: wrapDistance(entry + offset),
-    lane: (laneIndex - 1) * laneLimit,
-    speedFactor: 0.84 + Math.random() * 0.32,
-    driftPhase: Math.random() * 2 * Math.PI,
-    forwardVelocity: (Math.random() - 0.5) * 18,
-    laneVelocity: (Math.random() - 0.5) * 18,
-    sizeOffset: Math.floor(Math.random() * 3) - 1,
+    lane: (laneIndex - 1) * launchLaneSpacing,
+    speedFactor: 0.96 + Math.random() * 0.08,
+    sizeOffset,
   };
 }
 
-export function movePiece(piece: Piece, seconds: number, beltSpeed: number): void {
-  const damping = Math.exp(-4 * seconds);
-  const drift = Math.sin(piece.distance / loopLength * 8 * Math.PI + piece.driftPhase) * 20;
-  piece.forwardVelocity *= damping;
-  piece.laneVelocity = (piece.laneVelocity + drift * seconds) * damping;
-  const forwardSpeed = Math.max(beltSpeed * 0.2, beltSpeed * piece.speedFactor + piece.forwardVelocity);
-  piece.distance = wrapDistance(piece.distance + forwardSpeed * seconds);
-  piece.lane += piece.laneVelocity * seconds;
-  if (Math.abs(piece.lane) > laneLimit) {
-    piece.lane = Math.sign(piece.lane) * laneLimit;
-    piece.laneVelocity *= -0.4;
-  }
-}
-
-export function resolvePieceCollisions(pieces: Piece[]): void {
-  pieces.sort((a, b) => a.distance - b.distance);
-  for (let index = 0; index < pieces.length; index++) {
-    const piece = pieces[index];
-    for (let step = 1; step < pieces.length; step++) {
-      const nextIndex = (index + step) % pieces.length;
-      const next = pieces[nextIndex];
-      const dx = next.distance - piece.distance + (nextIndex < index ? loopLength : 0);
-      if (dx >= collisionDiameter) break;
-      const dy = next.lane - piece.lane;
-      const separation = Math.hypot(dx, dy);
-      if (separation >= collisionDiameter) continue;
-
-      const normalX = separation > 0 ? dx / separation : 1;
-      const normalY = separation > 0 ? dy / separation : 0;
-      const closingSpeed = (piece.forwardVelocity - next.forwardVelocity) * normalX
-        + (piece.laneVelocity - next.laneVelocity) * normalY;
-      const impulse = (collisionDiameter - separation) * 12 + Math.max(0, closingSpeed) * 0.6;
-      piece.forwardVelocity -= impulse * normalX;
-      next.forwardVelocity += impulse * normalX;
-      piece.laneVelocity -= impulse * normalY;
-      next.laneVelocity += impulse * normalY;
-    }
-  }
-}
-
-export function renderPiece(piece: Piece, progress: number, launching: boolean): void {
-  const { sprite, lane } = piece;
-  const heading = positionOnConveyor(sprite, piece.distance);
-  const x = sprite.x - Math.sin(heading) * lane;
-  const y = sprite.y + Math.cos(heading) * lane;
-  const rotation = Math.sin(piece.distance * 0.08 + piece.driftPhase) * 0.45 + piece.laneVelocity * 0.025;
-  if (launching) {
-    animatePieceFlight(piece, x, y, pieceWidth + piece.sizeOffset, pieceSize + piece.sizeOffset, rotation, progress);
-  } else {
-    sprite.position.set(x, y);
-    sprite.rotation = rotation;
-  }
+export function renderPieceOnBelt(piece: Piece): void {
+  const { sprite, body, sizeOffset } = piece;
+  sprite.position.copyFrom(body.position);
+  sprite.rotation = body.angle;
+  sprite.setSize(pieceWidth + sizeOffset, pieceHeight + sizeOffset);
   updatePieceShine(piece);
 }
 
-function updatePieceShine({ sprite, shine }: Piece): void {
+export function renderPieceLaunch(piece: Piece, elapsed: number, speed: number): void {
+  const { sprite, sizeOffset } = piece;
+  const approach = (elapsed - pieceFlightDuration) / 1000 * speed * piece.speedFactor;
+  positionOnConveyor(sprite.position, wrapDistance(piece.distance + approach), piece.lane);
+  const progress = elapsed / pieceFlightDuration;
+  const blend = progress * progress * (3 - 2 * progress);
+  animatePieceFlight(piece, sprite.x, sprite.y, pieceWidth + sizeOffset, pieceHeight + sizeOffset, piece.body.angle, blend);
+  sprite.y -= 10 * (4 * progress * (1 - progress)) ** 2;
+  updatePieceShine(piece);
+}
+
+function updatePieceShine({ sprite, shine }: Pick<Piece, 'sprite' | 'shine'>): void {
   const size = Math.min(sprite.width, sprite.height);
   const turn = Math.sin(sprite.rotation * 2);
   const facing = (Math.cos(sprite.rotation * 2) + 1) / 2;
@@ -159,7 +114,8 @@ function updatePieceShine({ sprite, shine }: Piece): void {
 
 export function preparePieceToStack(piece: Piece): void {
   const { sprite } = piece;
-  piece.from = readPose(sprite);
+  piece.from = readPose(sprite, readCubeVelocity(piece.body));
+  piece.from.rotation = Math.atan2(Math.sin(piece.from.rotation), Math.cos(piece.from.rotation));
   sprite.texture = getLoosePieceTexture(piece.blockTexture);
   sprite.setSize(piece.from.width, piece.from.height);
 }
@@ -227,6 +183,9 @@ export function stackPiece(piece: Piece, index: number, block: Sprite, elapsed: 
   const { x, y, width, height } = stackCell(block, index);
   const travel = Math.min(1, elapsed / pieceFlightDuration);
   animatePieceFlight(piece, x + truckOffset.x, y + truckOffset.y, width, height, 0, travel * travel * (3 - 2 * travel));
+  const momentum = elapsed / 1000 * (1 - travel) ** 2;
+  piece.sprite.x += piece.from.velocity.x * momentum;
+  piece.sprite.y += piece.from.velocity.y * momentum;
   const contact = landingProgress(elapsed);
   if (contact > 0) {
     const squash = Math.sin(Math.PI * contact);
