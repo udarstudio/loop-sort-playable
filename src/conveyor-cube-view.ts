@@ -15,8 +15,8 @@ const spinAxis = { x: 0, y: 0, z: 1 };
 const gravity = 250;
 
 function createRoundedCube(): Geometry3D {
-  const shapeExponent = 3.05;
-  const samples = [-0.5, -0.4, -0.25, 0, 0.25, 0.4, 0.5];
+  const shapeExponent = 2.95;
+  const samples = [-0.5, -0.32, 0, 0.32, 0.5];
   const row = samples.length;
   const positions: number[] = [];
   const normals: number[] = [];
