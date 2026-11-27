@@ -1,12 +1,8 @@
 import 'pixi.js/graphics';
 import 'pixi.js/events';
 import { Application, Container, FillGradient, Graphics, WebGLRenderer } from 'pixi.js';
-import alternativeMusicUrl from './assets/casual-music-loop-01.mp3';
-import classicMusicUrl from './assets/casual-music-loop-18.mp3';
-import piecePopUrl from './assets/pop-2.mp3';
-import truckCompleteUrl from './assets/sfx-powerup-bright-1.mp3';
-import winSoundUrl from './assets/win-1.mp3';
-import { boardHeight, boardWidth, conveyorCenter, conveyorTop, createBoard, truckCargoHeightAt, type PlayableVariant } from './board';
+import { createPlayableAudio } from './audio';
+import { boardHeight, boardWidth, conveyorCenter, conveyorTop, createBoard, type PlayableVariant } from './board';
 import { createConveyorFlow } from './conveyor-arrows';
 import { conveyorCapacity, createConveyorCargo } from './conveyor-cargo';
 import { createConveyorCubeView } from './conveyor-cube-view';
@@ -22,84 +18,10 @@ const winHoldDuration = 1500;
 const jamHoldDuration = 2000;
 const jamPulseDuration = 650;
 const truckPraise = ['Great!', 'Awesome!', 'Superb!'];
-const musicUrl = import.meta.env.VITE_PLAYABLE_THEME === 'alternative' ? alternativeMusicUrl : classicMusicUrl;
 const openingHooks = {
   standard: 'Harder than it seems',
   staged: 'Looks easy, right?',
 };
-
-function addBackgroundMusic(canvas: HTMLCanvasElement): () => void {
-  const music = new Audio();
-  music.preload = 'none';
-  music.loop = true;
-  music.volume = 0.35;
-  music.src = musicUrl;
-
-  function startMusic(): void {
-    void music.play().then(() => canvas.removeEventListener('click', startMusic), () => {});
-  }
-
-  canvas.addEventListener('click', startMusic);
-  return () => {
-    canvas.removeEventListener('click', startMusic);
-    music.pause();
-  };
-}
-
-function createTruckSounds() {
-  const audio = new AudioContext();
-
-  const unloadVolume = audio.createGain();
-  unloadVolume.gain.value = 0.35;
-  unloadVolume.connect(audio.destination);
-
-  const pieceVolume = audio.createGain();
-  pieceVolume.gain.value = 0.25;
-  pieceVolume.connect(audio.destination);
-
-  function loadSound(url: string) {
-    const buffer = fetch(url)
-      .then((response) => response.arrayBuffer())
-      .then((bytes) => audio.decodeAudioData(bytes))
-      .catch(() => null);
-
-    return async (rate = 1, output: AudioNode = audio.destination) => {
-      const decoded = await buffer;
-      if (!decoded || audio.state !== 'running') return;
-      const sound = audio.createBufferSource();
-      sound.buffer = decoded;
-      sound.playbackRate.value = rate;
-      sound.connect(output);
-      sound.start();
-    };
-  }
-
-  const pop = loadSound(piecePopUrl);
-  const playPop = (rate: number, output: AudioNode) =>
-    pop(rate * (0.92 + Math.random() * 0.16), output);
-  const playCubePop = (rate: number, y: number) =>
-    playPop(rate * (0.82 + 0.36 * truckCargoHeightAt(y)), pieceVolume);
-  const powerUp = loadSound(truckCompleteUrl);
-  const win = loadSound(winSoundUrl);
-  return {
-    onUnload() {
-      if (audio.state === 'running') void playPop(1, unloadVolume);
-      else void audio.resume().then(() => playPop(1, unloadVolume), () => {});
-    },
-    onPieceDeparture(y: number) {
-      void playCubePop(1.5, y);
-    },
-    onPieceLanded(y: number) {
-      void playCubePop(2.3, y);
-    },
-    onComplete() {
-      void powerUp();
-    },
-    onWin() {
-      void win();
-    },
-  };
-}
 
 async function startPlayable(mount: HTMLElement): Promise<void> {
   const app = new Application();
@@ -117,7 +39,9 @@ async function startPlayable(mount: HTMLElement): Promise<void> {
   const { mraid } = window as Window & { mraid?: {
     open(): void;
     getState(): string;
+    isViewable?(): boolean;
     addEventListener(event: 'ready', callback: () => void): void;
+    addEventListener(event: 'viewableChange', callback: (viewable: boolean) => void): void;
   } };
   let hasPlayed = false;
   if (mraid) {
@@ -172,7 +96,13 @@ async function startPlayable(mount: HTMLElement): Promise<void> {
   showCapacity(0);
 
   const flow = createConveyorFlow();
-  const sounds = createTruckSounds();
+  const sounds = createPlayableAudio();
+  if (mraid) {
+    const updateAudioViewability = () => sounds.setViewable(mraid.isViewable?.() ?? true);
+    mraid.addEventListener('viewableChange', sounds.setViewable);
+    updateAudioViewability();
+    if (mraid.getState() === 'loading') mraid.addEventListener('ready', updateAudioViewability);
+  }
   const cargo = createConveyorCargo(showCapacity, sounds.onPieceDeparture);
   const confetti = animate ? createTruckConfetti() : undefined;
   let praiseIndex = 0;
@@ -206,7 +136,7 @@ async function startPlayable(mount: HTMLElement): Promise<void> {
     gameTitle.classList.add('opening-hook');
   }
   gameTitle.hidden = false;
-  const stopBackgroundMusic = addBackgroundMusic(app.canvas);
+  app.canvas.addEventListener('click', sounds.startMusic);
   const gameOver = mount.querySelector<HTMLElement>('.game-over')!;
   let jammedFor = 0;
 
@@ -239,6 +169,11 @@ async function startPlayable(mount: HTMLElement): Promise<void> {
   }
   boardFrame.addChild(scene.jamGlow);
   if (confetti) boardFrame.addChild(confetti.view);
+
+  function stopBackgroundMusic(): void {
+    app.canvas.removeEventListener('click', sounds.startMusic);
+    sounds.stopMusic();
+  }
 
   function showWin(): void {
     winScreen.view.visible = true;
